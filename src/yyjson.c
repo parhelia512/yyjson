@@ -813,14 +813,14 @@ static_inline bool digi_is_digit_or_fp(u8 d) {
  * IEEE-754 Double Number Constants (Private)
  *============================================================================*/
 
-/* Inf raw value (positive) */
-#define F64_RAW_INF U64(0x7FF00000, 0x00000000)
+/* Inf binary value (positive) */
+#define F64_INF_BIN U64(0x7FF00000, 0x00000000)
 
-/* NaN raw value (quiet NaN, no payload, no sign) */
+/* NaN binary value (quiet NaN, no payload, no sign) */
 #if defined(__hppa__) || (defined(__mips__) && !defined(__mips_nan2008))
-#define F64_RAW_NAN U64(0x7FF7FFFF, 0xFFFFFFFF)
+#define F64_NAN_BIN U64(0x7FF7FFFF, 0xFFFFFFFF)
 #else
-#define F64_RAW_NAN U64(0x7FF80000, 0x00000000)
+#define F64_NAN_BIN U64(0x7FF80000, 0x00000000)
 #endif
 
 /* double number bits */
@@ -870,10 +870,10 @@ static_inline bool digi_is_digit_or_fp(u8 d) {
  *============================================================================*/
 
 /** Maximum exponent of exact pow10 */
-#define U64_POW10_MAX_EXP 19
+#define U64_POW10_MAX_EXACT_EXP 19
 
 /** Table: [ 10^0, ..., 10^19 ] (generate with misc/make_tables.c) */
-static const u64 u64_pow10_table[U64_POW10_MAX_EXP + 1] = {
+static const u64 u64_pow10_table[U64_POW10_MAX_EXACT_EXP + 1] = {
     U64(0x00000000, 0x00000001), U64(0x00000000, 0x0000000A),
     U64(0x00000000, 0x00000064), U64(0x00000000, 0x000003E8),
     U64(0x00000000, 0x00002710), U64(0x00000000, 0x000186A0),
@@ -886,22 +886,22 @@ static const u64 u64_pow10_table[U64_POW10_MAX_EXP + 1] = {
     U64(0x0DE0B6B3, 0xA7640000), U64(0x8AC72304, 0x89E80000)
 };
 
-/** Minimum decimal exponent in pow10_sig_table. */
-#define POW10_SIG_TABLE_MIN_EXP -343
+/** Minimum decimal exponent in u128_pow10_table. */
+#define U128_POW10_MIN_EXP -343
 
-/** Maximum decimal exponent in pow10_sig_table. */
-#define POW10_SIG_TABLE_MAX_EXP 324
+/** Maximum decimal exponent in u128_pow10_table. */
+#define U128_POW10_MAX_EXP 324
 
-/** Minimum exact decimal exponent in pow10_sig_table */
-#define POW10_SIG_TABLE_MIN_EXACT_EXP 0
+/** Minimum exact decimal exponent in u128_pow10_table */
+#define U128_POW10_MIN_EXACT_EXP 0
 
-/** Maximum exact decimal exponent in pow10_sig_table */
-#define POW10_SIG_TABLE_MAX_EXACT_EXP 55
+/** Maximum exact decimal exponent in u128_pow10_table */
+#define U128_POW10_MAX_EXACT_EXP 55
 
 /** Normalized significant 128 bits of pow10, no rounded up (size: 10.4KB).
     This lookup table is used by both the double number reader and writer.
     (generate with misc/make_tables.c) */
-static const u64 pow10_sig_table[] = {
+static const u64 u128_pow10_table[] = {
     U64(0xBF29DCAB, 0xA82FDEAE), U64(0x7432EE87, 0x3880FC33), /* ~= 10^-343 */
     U64(0xEEF453D6, 0x923BD65A), U64(0x113FAA29, 0x06A13B3F), /* ~= 10^-342 */
     U64(0x9558B466, 0x1B6565F8), U64(0x4AC7CA59, 0xA424C507), /* ~= 10^-341 */
@@ -1573,22 +1573,22 @@ static const u64 pow10_sig_table[] = {
 };
 
 /**
- Get the cached pow10 value from pow10_sig_table.
+ Get the cached pow10 value from u128_pow10_table.
  @param exp10 The exponent of pow(10, e). This value must in range
-              POW10_SIG_TABLE_MIN_EXP to POW10_SIG_TABLE_MAX_EXP.
+              U128_POW10_MIN_EXP to U128_POW10_MAX_EXP.
  @param hi    The highest 64 bits of pow(10, e).
  @param lo    The lower 64 bits after `hi`.
  */
-static_inline void pow10_table_get_sig(i32 exp10, u64 *hi, u64 *lo) {
-    i32 idx = exp10 - (POW10_SIG_TABLE_MIN_EXP);
-    *hi = pow10_sig_table[idx * 2];
-    *lo = pow10_sig_table[idx * 2 + 1];
+static_inline void u128_pow10_get_sig(i32 exp10, u64 *hi, u64 *lo) {
+    i32 idx = exp10 - (U128_POW10_MIN_EXP);
+    *hi = u128_pow10_table[idx * 2];
+    *lo = u128_pow10_table[idx * 2 + 1];
 }
 
 /**
- Get the exponent (base 2) for highest 64 bits significand in pow10_sig_table.
+ Get the exponent (base 2) for highest 64 bits significand in u128_pow10_table.
  */
-static_inline void pow10_table_get_exp(i32 exp10, i32 *exp2) {
+static_inline void u128_pow10_get_exp(i32 exp10, i32 *exp2) {
     /* e2 = floor(log2(pow(10, e))) - 64 + 1 */
     /*    = floor(e * log2(10) - 63)         */
     *exp2 = (exp10 * 217706 - 4128768) >> 16;
@@ -1665,41 +1665,41 @@ static_inline u32 u64_tz_bits(u64 v) {
 #endif
 }
 
-/** Convert raw binary to double. */
-static_inline f64 f64_from_raw(u64 u) {
+/** Convert binary to double. */
+static_inline f64 f64_from_bin(u64 u) {
     /* use memcpy to avoid violating the strict aliasing rule */
     f64 f;
     memcpy(&f, &u, 8);
     return f;
 }
 
-/** Convert double to raw binary. */
-static_inline u64 f64_to_raw(f64 f) {
+/** Convert double to binary. */
+static_inline u64 f64_to_bin(f64 f) {
     /* use memcpy to avoid violating the strict aliasing rule */
     u64 u;
     memcpy(&u, &f, 8);
     return u;
 }
 
-/** Get raw 'infinity' with sign. */
-static_inline u64 f64_raw_get_inf(bool sign) {
+/** Get 'infinity' binary with sign. */
+static_inline u64 f64_get_inf_bin(bool sign) {
 #if YYJSON_HAS_IEEE_754
-    return F64_RAW_INF | ((u64)sign << 63);
+    return F64_INF_BIN | ((u64)sign << 63);
 #elif defined(INFINITY)
-    return f64_to_raw(sign ? -INFINITY : INFINITY);
+    return f64_to_bin(sign ? -INFINITY : INFINITY);
 #else
-    return f64_to_raw(sign ? -HUGE_VAL : HUGE_VAL);
+    return f64_to_bin(sign ? -HUGE_VAL : HUGE_VAL);
 #endif
 }
 
-/** Get raw 'nan' with sign. */
-static_inline u64 f64_raw_get_nan(bool sign) {
+/** Get 'nan' binary with sign. */
+static_inline u64 f64_get_nan_bin(bool sign) {
 #if YYJSON_HAS_IEEE_754
-    return F64_RAW_NAN | ((u64)sign << 63);
+    return F64_NAN_BIN | ((u64)sign << 63);
 #elif defined(NAN)
-    return f64_to_raw(sign ? (f64)-NAN : (f64)NAN);
+    return f64_to_bin(sign ? (f64)-NAN : (f64)NAN);
 #else
-    return f64_to_raw((sign ? -0.0 : 0.0) / 0.0);
+    return f64_to_bin((sign ? -0.0 : 0.0) / 0.0);
 #endif
 }
 
@@ -2740,7 +2740,7 @@ bool unsafe_yyjson_mut_equals(yyjson_mut_val *lhs, yyjson_mut_val *rhs) {
 
 #if !YYJSON_DISABLE_READER
 
-#define has_read_flag(_flag) unlikely(read_flag_eq(flg, YYJSON_READ_##_flag))
+#define has_flag(_flag) unlikely(read_flag_eq(flg, YYJSON_READ_##_flag))
 
 static_inline bool read_flag_eq(yyjson_read_flag flg, yyjson_read_flag chk) {
 #if YYJSON_DISABLE_NON_STANDARD
@@ -2888,7 +2888,7 @@ static_inline bool read_inf(bool sign, u8 **ptr, u8 **pre, yyjson_val *val) {
             val->uni.str = (const char *)hdr;
         } else {
             val->tag = YYJSON_TYPE_NUM | YYJSON_SUBTYPE_REAL;
-            val->uni.u64 = f64_raw_get_inf(sign);
+            val->uni.u64 = f64_get_inf_bin(sign);
         }
         return true;
     }
@@ -2913,7 +2913,7 @@ static_inline bool read_nan(bool sign, u8 **ptr, u8 **pre, yyjson_val *val) {
             val->uni.str = (const char *)hdr;
         } else {
             val->tag = YYJSON_TYPE_NUM | YYJSON_SUBTYPE_REAL;
-            val->uni.u64 = f64_raw_get_nan(sign);
+            val->uni.u64 = f64_get_nan_bin(sign);
         }
         return true;
     }
@@ -2959,7 +2959,7 @@ static_noinline bool read_number_raw(u8 **ptr,
     
     /* read first digit, check leading zero */
     if (unlikely(!digi_is_digit(*cur))) {
-        if (has_read_flag(ALLOW_INF_AND_NAN)) {
+        if (has_flag(ALLOW_INF_AND_NAN)) {
             if (read_inf_or_nan(*hdr == '-', &cur, pre, val)) return_raw();
         }
         return_err(cur, "no digit after minus sign");
@@ -3084,7 +3084,7 @@ static_noinline bool is_truncated_end(u8 *hdr, u8 *cur, u8 *end,
     if (code == YYJSON_READ_ERROR_UNEXPECTED_CHARACTER ||
         code == YYJSON_READ_ERROR_INVALID_NUMBER ||
         code == YYJSON_READ_ERROR_LITERAL) {
-        if (has_read_flag(ALLOW_INF_AND_NAN)) {
+        if (has_flag(ALLOW_INF_AND_NAN)) {
             if (*cur == '-') cur++;
             if (is_truncated_str(cur, end, "infinity", false) ||
                 is_truncated_str(cur, end, "nan", false)) {
@@ -3093,7 +3093,7 @@ static_noinline bool is_truncated_end(u8 *hdr, u8 *cur, u8 *end,
         }
     }
     if (code == YYJSON_READ_ERROR_UNEXPECTED_CONTENT) {
-        if (has_read_flag(ALLOW_INF_AND_NAN)) {
+        if (has_flag(ALLOW_INF_AND_NAN)) {
             if (hdr + 3 <= cur &&
                 is_truncated_str(cur - 3, end, "infinity", false)) {
                 return true; /* e.g. infin would be read as inf + in */
@@ -3250,8 +3250,8 @@ static_inline void bigint_mul_pow2(bigint *big, u32 exp) {
  @param exp An exponent integer (cannot be 0).
  */
 static_inline void bigint_mul_pow10(bigint *big, i32 exp) {
-    for (; exp >= U64_POW10_MAX_EXP; exp -= U64_POW10_MAX_EXP) {
-        bigint_mul_u64(big, u64_pow10_table[U64_POW10_MAX_EXP]);
+    for (; exp >= U64_POW10_MAX_EXACT_EXP; exp -= U64_POW10_MAX_EXACT_EXP) {
+        bigint_mul_u64(big, u64_pow10_table[U64_POW10_MAX_EXACT_EXP]);
     }
     if (exp) {
         bigint_mul_u64(big, u64_pow10_table[exp]);
@@ -3354,12 +3354,12 @@ typedef struct diy_fp {
 } diy_fp;
 
 /** Get cached rounded diy_fp with pow(10, e) The input value must in range
-    [POW10_SIG_TABLE_MIN_EXP, POW10_SIG_TABLE_MAX_EXP]. */
+    [U128_POW10_MIN_EXP, U128_POW10_MAX_EXP]. */
 static_inline diy_fp diy_fp_get_cached_pow10(i32 exp10) {
     diy_fp fp;
     u64 sig_ext;
-    pow10_table_get_sig(exp10, &fp.sig, &sig_ext);
-    pow10_table_get_exp(exp10, &fp.exp);
+    u128_pow10_get_sig(exp10, &fp.sig, &sig_ext);
+    u128_pow10_get_exp(exp10, &fp.exp);
     fp.sig += (sig_ext >> 63);
     return fp;
 }
@@ -3373,8 +3373,8 @@ static_inline diy_fp diy_fp_mul(diy_fp fp, diy_fp fp2) {
     return fp;
 }
 
-/** Convert diy_fp to IEEE-754 raw value. */
-static_inline u64 diy_fp_to_ieee_raw(diy_fp fp) {
+/** Convert diy_fp to IEEE-754 binary value. */
+static_inline u64 diy_fp_to_ieee_bin(diy_fp fp) {
     u64 sig = fp.sig;
     i32 exp = fp.exp;
     u32 lz_bits;
@@ -3389,7 +3389,7 @@ static_inline u64 diy_fp_to_ieee_raw(diy_fp fp) {
     
     if (unlikely(exp >= F64_MAX_BIN_EXP)) {
         /* overflow */
-        return F64_RAW_INF;
+        return F64_INF_BIN;
     } else if (likely(exp >= F64_MIN_BIN_EXP - 1)) {
         /* normal */
         exp += F64_EXP_BIAS;
@@ -3464,8 +3464,8 @@ static_inline bool read_number(u8 **ptr,
 } while (false)
     
 #define return_inf() do { \
-    if (has_read_flag(BIGNUM_AS_RAW)) return_raw(); \
-    if (has_read_flag(ALLOW_INF_AND_NAN)) return_f64_bin(F64_RAW_INF); \
+    if (has_flag(BIGNUM_AS_RAW)) return_raw(); \
+    if (has_flag(ALLOW_INF_AND_NAN)) return_f64_bin(F64_INF_BIN); \
     else return_err(hdr, "number is infinity when parsed as double"); \
 } while (false)
     
@@ -3495,7 +3495,7 @@ static_inline bool read_number(u8 **ptr,
     bool sign;
     
     /* read number as raw string if has `YYJSON_READ_NUMBER_AS_RAW` flag */
-    if (unlikely(pre && !has_read_flag(BIGNUM_AS_RAW))) {
+    if (unlikely(pre && !has_flag(BIGNUM_AS_RAW))) {
         return read_number_raw(ptr, pre, flg, val, msg);
     }
     
@@ -3505,7 +3505,7 @@ static_inline bool read_number(u8 **ptr,
     /* begin with a leading zero or non-digit */
     if (unlikely(!digi_is_nonzero(*cur))) { /* 0 or non-digit char */
         if (unlikely(*cur != '0')) { /* non-digit char */
-            if (has_read_flag(ALLOW_INF_AND_NAN)) {
+            if (has_flag(ALLOW_INF_AND_NAN)) {
                 if (read_inf_or_nan(sign, &cur, pre, val)) {
                     *end = cur;
                     return true;
@@ -3564,7 +3564,7 @@ static_inline bool read_number(u8 **ptr,
     if (!digi_is_digit_or_fp(*cur)) {
         /* this number is an integer consisting of 19 digits */
         if (sign && (sig > ((u64)1 << 63))) { /* overflow */
-            if (has_read_flag(BIGNUM_AS_RAW)) return_raw();
+            if (has_flag(BIGNUM_AS_RAW)) return_raw();
             return_f64(normalized_u64_to_f64(sig));
         }
         return_i64(sig);
@@ -3618,7 +3618,7 @@ digi_intg_more:
                 cur++;
                 /* convert to double if overflow */
                 if (sign) {
-                    if (has_read_flag(BIGNUM_AS_RAW)) return_raw();
+                    if (has_flag(BIGNUM_AS_RAW)) return_raw();
                     return_f64(normalized_u64_to_f64(sig));
                 }
                 return_i64(sig);
@@ -3645,7 +3645,7 @@ digi_frac_more:
     sig += (*cur >= '5'); /* round */
     while (digi_is_digit(*++cur));
     if (!dot_pos) {
-        if (!digi_is_fp(*cur) && has_read_flag(BIGNUM_AS_RAW)) {
+        if (!digi_is_fp(*cur) && has_flag(BIGNUM_AS_RAW)) {
             return_raw(); /* it's a large integer */
         }
         dot_pos = cur;
@@ -3768,7 +3768,7 @@ digi_finish:
          the exponent part (10^exp) can be converted to (sig2 * 2^exp2).
          
          The sig2 can be an infinite length number, only the highest 128 bits
-         is cached in the pow10_sig_table.
+         is cached in the u128_pow10_table.
          
          Now we have these bits:
          sig1 (normalized 64bit)        : aaaaaaaa
@@ -3808,15 +3808,15 @@ digi_finish:
             as the extra bits is unknown, this case will not be handled here.
          */
         
-        u64 raw;
+        u64 bin;
         u64 sig1, sig2, sig2_ext, hi, lo, hi2, lo2, add, bits;
         i32 exp2;
         u32 lz;
         bool exact = false, carry, round_up;
         
         /* convert (10^exp) to (sig2 * 2^exp2) */
-        pow10_table_get_sig(exp, &sig2, &sig2_ext);
-        pow10_table_get_exp(exp, &exp2);
+        u128_pow10_get_sig(exp, &sig2, &sig2_ext);
+        u128_pow10_get_exp(exp, &exp2);
         
         /* normalize and multiply */
         lz = u64_lz_bits(sig);
@@ -3887,8 +3887,8 @@ digi_finish:
             hi >>= F64_BITS - F64_SIG_FULL_BITS;
             exp2 += F64_BITS - F64_SIG_FULL_BITS + F64_SIG_BITS;
             exp2 += F64_EXP_BIAS;
-            raw = ((u64)exp2 << F64_SIG_BITS) | (hi & F64_SIG_MASK);
-            return_f64_bin(raw);
+            bin = ((u64)exp2 << F64_SIG_BITS) | (hi & F64_SIG_MASK);
+            return_f64_bin(bin);
         }
     }
     
@@ -3917,7 +3917,7 @@ digi_finish:
         u64 precision_bits;
         u64 half_way;
         
-        u64 raw;
+        u64 bin;
         diy_fp fp, fp_upper;
         bigint big_full, big_comp;
         i32 cmp;
@@ -3973,21 +3973,21 @@ digi_finish:
         fp.sig += (precision_bits >= half_way + fp_err);
         fp.exp += precision_digits_count;
         
-        /* get IEEE double raw value */
-        raw = diy_fp_to_ieee_raw(fp);
-        if (unlikely(raw == F64_RAW_INF)) return_inf();
+        /* get IEEE double binary value */
+        bin = diy_fp_to_ieee_bin(fp);
+        if (unlikely(bin == F64_INF_BIN)) return_inf();
         if (likely(precision_bits <= half_way - fp_err ||
                    precision_bits >= half_way + fp_err)) {
-            return_f64_bin(raw); /* number is accurate */
+            return_f64_bin(bin); /* number is accurate */
         }
         /* now the number is the correct value, or the next lower value */
         
         /* upper boundary */
-        if (raw & F64_EXP_MASK) {
-            fp_upper.sig = (raw & F64_SIG_MASK) + ((u64)1 << F64_SIG_BITS);
-            fp_upper.exp = (i32)((raw & F64_EXP_MASK) >> F64_SIG_BITS);
+        if (bin & F64_EXP_MASK) {
+            fp_upper.sig = (bin & F64_SIG_MASK) + ((u64)1 << F64_SIG_BITS);
+            fp_upper.exp = (i32)((bin & F64_EXP_MASK) >> F64_SIG_BITS);
         } else {
-            fp_upper.sig = (raw & F64_SIG_MASK);
+            fp_upper.sig = (bin & F64_SIG_MASK);
             fp_upper.exp = 1;
         }
         fp_upper.exp -= F64_EXP_BIAS + F64_SIG_BITS;
@@ -4011,14 +4011,14 @@ digi_finish:
         cmp = bigint_cmp(&big_full, &big_comp);
         if (likely(cmp != 0)) {
             /* round down or round up */
-            raw += (cmp > 0);
+            bin += (cmp > 0);
         } else {
             /* falls midway, round to even */
-            raw += (raw & 1);
+            bin += (bin & 1);
         }
         
-        if (unlikely(raw == F64_RAW_INF)) return_inf();
-        return_f64_bin(raw);
+        if (unlikely(bin == F64_INF_BIN)) return_inf();
+        return_f64_bin(bin);
     }
     
 #undef return_err
@@ -4076,8 +4076,8 @@ static_inline bool read_number(u8 **ptr,
 } while (false)
     
 #define return_inf() do { \
-    if (has_read_flag(BIGNUM_AS_RAW)) return_raw(); \
-    if (has_read_flag(ALLOW_INF_AND_NAN)) return_f64_bin(F64_RAW_INF); \
+    if (has_flag(BIGNUM_AS_RAW)) return_raw(); \
+    if (has_flag(ALLOW_INF_AND_NAN)) return_f64_bin(F64_INF_BIN); \
     else return_err(hdr, "number is infinity when parsed as double"); \
 } while (false)
     
@@ -4097,7 +4097,7 @@ static_inline bool read_number(u8 **ptr,
     bool sign;
     
     /* read number as raw string if has `YYJSON_READ_NUMBER_AS_RAW` flag */
-    if (unlikely(pre && !has_read_flag(BIGNUM_AS_RAW))) {
+    if (unlikely(pre && !has_flag(BIGNUM_AS_RAW))) {
         return read_number_raw(ptr, pre, flg, val, msg);
     }
     
@@ -4107,7 +4107,7 @@ static_inline bool read_number(u8 **ptr,
     
     /* read first digit, check leading zero */
     if (unlikely(!digi_is_digit(*cur))) {
-        if (has_read_flag(ALLOW_INF_AND_NAN)) {
+        if (has_flag(ALLOW_INF_AND_NAN)) {
             if (read_inf_or_nan(sign, &cur, pre, val)) {
                 *end = cur;
                 return true;
@@ -4141,7 +4141,7 @@ static_inline bool read_number(u8 **ptr,
             sig = num + sig * 10;
             cur++;
             if (sign) {
-                if (has_read_flag(BIGNUM_AS_RAW)) return_raw();
+                if (has_flag(BIGNUM_AS_RAW)) return_raw();
                 return_f64(normalized_u64_to_f64(sig));
             }
             return_i64(sig);
@@ -4153,7 +4153,7 @@ intg_end:
     if (!digi_is_digit_or_fp(*cur)) {
         /* this number is an integer consisting of 1 to 19 digits */
         if (sign && (sig > ((u64)1 << 63))) {
-            if (has_read_flag(BIGNUM_AS_RAW)) return_raw();
+            if (has_flag(BIGNUM_AS_RAW)) return_raw();
             return_f64(normalized_u64_to_f64(sig));
         }
         return_i64(sig);
@@ -4162,7 +4162,7 @@ intg_end:
 read_double:
     /* this number should be read as double */
     while (digi_is_digit(*cur)) cur++;
-    if (!digi_is_fp(*cur) && has_read_flag(BIGNUM_AS_RAW)) {
+    if (!digi_is_fp(*cur) && has_flag(BIGNUM_AS_RAW)) {
         return_raw(); /* it's a large integer */
     }
     if (*cur == '.') {
@@ -4790,8 +4790,8 @@ static_noinline yyjson_doc *read_root_single(u8 *hdr,
     val_hdr = (yyjson_val *)alc.malloc(alc.ctx, alc_num * sizeof(yyjson_val));
     if (unlikely(!val_hdr)) goto fail_alloc;
     val = val_hdr + hdr_len;
-    raw = has_read_flag(NUMBER_AS_RAW) || has_read_flag(BIGNUM_AS_RAW);
-    inv = has_read_flag(ALLOW_INVALID_UNICODE) != 0;
+    raw = has_flag(NUMBER_AS_RAW) || has_flag(BIGNUM_AS_RAW);
+    inv = has_flag(ALLOW_INVALID_UNICODE) != 0;
     raw_end = NULL;
     pre = raw ? &raw_end : NULL;
     
@@ -4813,20 +4813,20 @@ static_noinline yyjson_doc *read_root_single(u8 *hdr,
     }
     if (*cur == 'n') {
         if (likely(read_null(&cur, val))) goto doc_end;
-        if (has_read_flag(ALLOW_INF_AND_NAN)) {
+        if (has_flag(ALLOW_INF_AND_NAN)) {
             if (read_nan(false, &cur, pre, val)) goto doc_end;
         }
         goto fail_literal;
     }
-    if (has_read_flag(ALLOW_INF_AND_NAN)) {
+    if (has_flag(ALLOW_INF_AND_NAN)) {
         if (read_inf_or_nan(false, &cur, pre, val)) goto doc_end;
     }
     goto fail_character;
     
 doc_end:
     /* check invalid contents after json document */
-    if (unlikely(cur < end) && !has_read_flag(STOP_WHEN_DONE)) {
-        if (has_read_flag(ALLOW_COMMENTS)) {
+    if (unlikely(cur < end) && !has_flag(STOP_WHEN_DONE)) {
+        if (has_flag(ALLOW_COMMENTS)) {
             if (!skip_spaces_and_comments(&cur)) {
                 if (byte_match_2(cur, "/*")) goto fail_comment;
             }
@@ -4842,7 +4842,7 @@ doc_end:
     doc->alc = alc;
     doc->dat_read = (usize)(cur - hdr);
     doc->val_read = 1;
-    doc->str_pool = has_read_flag(INSITU) ? NULL : (char *)hdr;
+    doc->str_pool = has_flag(INSITU) ? NULL : (char *)hdr;
     return doc;
     
 fail_string:
@@ -4921,7 +4921,7 @@ static_inline yyjson_doc *read_root_minify(u8 *hdr,
     u8 *raw_end; /* raw end for null-terminator */
     u8 **pre; /* previous raw end pointer */
     
-    dat_len = has_read_flag(STOP_WHEN_DONE) ? 256 : (usize)(end - cur);
+    dat_len = has_flag(STOP_WHEN_DONE) ? 256 : (usize)(end - cur);
     hdr_len = sizeof(yyjson_doc) / sizeof(yyjson_val);
     hdr_len += (sizeof(yyjson_doc) % sizeof(yyjson_val)) > 0;
     alc_max = USIZE_MAX / sizeof(yyjson_val);
@@ -4934,8 +4934,8 @@ static_inline yyjson_doc *read_root_minify(u8 *hdr,
     val = val_hdr + hdr_len;
     ctn = val;
     ctn_len = 0;
-    raw = has_read_flag(NUMBER_AS_RAW) || has_read_flag(BIGNUM_AS_RAW);
-    inv = has_read_flag(ALLOW_INVALID_UNICODE) != 0;
+    raw = has_flag(NUMBER_AS_RAW) || has_flag(BIGNUM_AS_RAW);
+    inv = has_flag(ALLOW_INVALID_UNICODE) != 0;
     raw_end = NULL;
     pre = raw ? &raw_end : NULL;
     
@@ -5000,7 +5000,7 @@ arr_val_begin:
         val_incr();
         ctn_len++;
         if (likely(read_null(&cur, val))) goto arr_val_end;
-        if (has_read_flag(ALLOW_INF_AND_NAN)) {
+        if (has_flag(ALLOW_INF_AND_NAN)) {
             if (read_nan(false, &cur, pre, val)) goto arr_val_end;
         }
         goto fail_literal;
@@ -5008,7 +5008,7 @@ arr_val_begin:
     if (*cur == ']') {
         cur++;
         if (likely(ctn_len == 0)) goto arr_end;
-        if (has_read_flag(ALLOW_TRAILING_COMMAS)) goto arr_end;
+        if (has_flag(ALLOW_TRAILING_COMMAS)) goto arr_end;
         while (*cur != ',') cur--;
         goto fail_trailing_comma;
     }
@@ -5016,14 +5016,14 @@ arr_val_begin:
         while (char_is_space(*++cur));
         goto arr_val_begin;
     }
-    if (has_read_flag(ALLOW_INF_AND_NAN) &&
+    if (has_flag(ALLOW_INF_AND_NAN) &&
         (*cur == 'i' || *cur == 'I' || *cur == 'N')) {
         val_incr();
         ctn_len++;
         if (read_inf_or_nan(false, &cur, pre, val)) goto arr_val_end;
         goto fail_character;
     }
-    if (has_read_flag(ALLOW_COMMENTS)) {
+    if (has_flag(ALLOW_COMMENTS)) {
         if (skip_spaces_and_comments(&cur)) goto arr_val_begin;
         if (byte_match_2(cur, "/*")) goto fail_comment;
     }
@@ -5042,7 +5042,7 @@ arr_val_end:
         while (char_is_space(*++cur));
         goto arr_val_end;
     }
-    if (has_read_flag(ALLOW_COMMENTS)) {
+    if (has_flag(ALLOW_COMMENTS)) {
         if (skip_spaces_and_comments(&cur)) goto arr_val_end;
         if (byte_match_2(cur, "/*")) goto fail_comment;
     }
@@ -5087,7 +5087,7 @@ obj_key_begin:
     if (likely(*cur == '}')) {
         cur++;
         if (likely(ctn_len == 0)) goto obj_end;
-        if (has_read_flag(ALLOW_TRAILING_COMMAS)) goto obj_end;
+        if (has_flag(ALLOW_TRAILING_COMMAS)) goto obj_end;
         while (*cur != ',') cur--;
         goto fail_trailing_comma;
     }
@@ -5095,7 +5095,7 @@ obj_key_begin:
         while (char_is_space(*++cur));
         goto obj_key_begin;
     }
-    if (has_read_flag(ALLOW_COMMENTS)) {
+    if (has_flag(ALLOW_COMMENTS)) {
         if (skip_spaces_and_comments(&cur)) goto obj_key_begin;
         if (byte_match_2(cur, "/*")) goto fail_comment;
     }
@@ -5110,7 +5110,7 @@ obj_key_end:
         while (char_is_space(*++cur));
         goto obj_key_end;
     }
-    if (has_read_flag(ALLOW_COMMENTS)) {
+    if (has_flag(ALLOW_COMMENTS)) {
         if (skip_spaces_and_comments(&cur)) goto obj_key_end;
         if (byte_match_2(cur, "/*")) goto fail_comment;
     }
@@ -5153,7 +5153,7 @@ obj_val_begin:
         val++;
         ctn_len++;
         if (likely(read_null(&cur, val))) goto obj_val_end;
-        if (has_read_flag(ALLOW_INF_AND_NAN)) {
+        if (has_flag(ALLOW_INF_AND_NAN)) {
             if (read_nan(false, &cur, pre, val)) goto obj_val_end;
         }
         goto fail_literal;
@@ -5162,14 +5162,14 @@ obj_val_begin:
         while (char_is_space(*++cur));
         goto obj_val_begin;
     }
-    if (has_read_flag(ALLOW_INF_AND_NAN) &&
+    if (has_flag(ALLOW_INF_AND_NAN) &&
         (*cur == 'i' || *cur == 'I' || *cur == 'N')) {
         val++;
         ctn_len++;
         if (read_inf_or_nan(false, &cur, pre, val)) goto obj_val_end;
         goto fail_character;
     }
-    if (has_read_flag(ALLOW_COMMENTS)) {
+    if (has_flag(ALLOW_COMMENTS)) {
         if (skip_spaces_and_comments(&cur)) goto obj_val_begin;
         if (byte_match_2(cur, "/*")) goto fail_comment;
     }
@@ -5188,7 +5188,7 @@ obj_val_end:
         while (char_is_space(*++cur));
         goto obj_val_end;
     }
-    if (has_read_flag(ALLOW_COMMENTS)) {
+    if (has_flag(ALLOW_COMMENTS)) {
         if (skip_spaces_and_comments(&cur)) goto obj_val_end;
         if (byte_match_2(cur, "/*")) goto fail_comment;
     }
@@ -5211,8 +5211,8 @@ obj_end:
     
 doc_end:
     /* check invalid contents after json document */
-    if (unlikely(cur < end) && !has_read_flag(STOP_WHEN_DONE)) {
-        if (has_read_flag(ALLOW_COMMENTS)) {
+    if (unlikely(cur < end) && !has_flag(STOP_WHEN_DONE)) {
+        if (has_flag(ALLOW_COMMENTS)) {
             skip_spaces_and_comments(&cur);
             if (byte_match_2(cur, "/*")) goto fail_comment;
         } else {
@@ -5227,7 +5227,7 @@ doc_end:
     doc->alc = alc;
     doc->dat_read = (usize)(cur - hdr);
     doc->val_read = (usize)((val - doc->root) + 1);
-    doc->str_pool = has_read_flag(INSITU) ? NULL : (char *)hdr;
+    doc->str_pool = has_flag(INSITU) ? NULL : (char *)hdr;
     return doc;
     
 fail_string:
@@ -5309,7 +5309,7 @@ static_inline yyjson_doc *read_root_pretty(u8 *hdr,
     u8 *raw_end; /* raw end for null-terminator */
     u8 **pre; /* previous raw end pointer */
     
-    dat_len = has_read_flag(STOP_WHEN_DONE) ? 256 : (usize)(end - cur);
+    dat_len = has_flag(STOP_WHEN_DONE) ? 256 : (usize)(end - cur);
     hdr_len = sizeof(yyjson_doc) / sizeof(yyjson_val);
     hdr_len += (sizeof(yyjson_doc) % sizeof(yyjson_val)) > 0;
     alc_max = USIZE_MAX / sizeof(yyjson_val);
@@ -5322,8 +5322,8 @@ static_inline yyjson_doc *read_root_pretty(u8 *hdr,
     val = val_hdr + hdr_len;
     ctn = val;
     ctn_len = 0;
-    raw = has_read_flag(NUMBER_AS_RAW) || has_read_flag(BIGNUM_AS_RAW);
-    inv = has_read_flag(ALLOW_INVALID_UNICODE) != 0;
+    raw = has_flag(NUMBER_AS_RAW) || has_flag(BIGNUM_AS_RAW);
+    inv = has_flag(ALLOW_INVALID_UNICODE) != 0;
     raw_end = NULL;
     pre = raw ? &raw_end : NULL;
     
@@ -5403,7 +5403,7 @@ arr_val_begin:
         val_incr();
         ctn_len++;
         if (likely(read_null(&cur, val))) goto arr_val_end;
-        if (has_read_flag(ALLOW_INF_AND_NAN)) {
+        if (has_flag(ALLOW_INF_AND_NAN)) {
             if (read_nan(false, &cur, pre, val)) goto arr_val_end;
         }
         goto fail_literal;
@@ -5411,7 +5411,7 @@ arr_val_begin:
     if (*cur == ']') {
         cur++;
         if (likely(ctn_len == 0)) goto arr_end;
-        if (has_read_flag(ALLOW_TRAILING_COMMAS)) goto arr_end;
+        if (has_flag(ALLOW_TRAILING_COMMAS)) goto arr_end;
         while (*cur != ',') cur--;
         goto fail_trailing_comma;
     }
@@ -5419,14 +5419,14 @@ arr_val_begin:
         while (char_is_space(*++cur));
         goto arr_val_begin;
     }
-    if (has_read_flag(ALLOW_INF_AND_NAN) &&
+    if (has_flag(ALLOW_INF_AND_NAN) &&
         (*cur == 'i' || *cur == 'I' || *cur == 'N')) {
         val_incr();
         ctn_len++;
         if (read_inf_or_nan(false, &cur, pre, val)) goto arr_val_end;
         goto fail_character;
     }
-    if (has_read_flag(ALLOW_COMMENTS)) {
+    if (has_flag(ALLOW_COMMENTS)) {
         if (skip_spaces_and_comments(&cur)) goto arr_val_begin;
         if (byte_match_2(cur, "/*")) goto fail_comment;
     }
@@ -5449,7 +5449,7 @@ arr_val_end:
         while (char_is_space(*++cur));
         goto arr_val_end;
     }
-    if (has_read_flag(ALLOW_COMMENTS)) {
+    if (has_flag(ALLOW_COMMENTS)) {
         if (skip_spaces_and_comments(&cur)) goto arr_val_end;
         if (byte_match_2(cur, "/*")) goto fail_comment;
     }
@@ -5507,7 +5507,7 @@ obj_key_begin:
     if (likely(*cur == '}')) {
         cur++;
         if (likely(ctn_len == 0)) goto obj_end;
-        if (has_read_flag(ALLOW_TRAILING_COMMAS)) goto obj_end;
+        if (has_flag(ALLOW_TRAILING_COMMAS)) goto obj_end;
         while (*cur != ',') cur--;
         goto fail_trailing_comma;
     }
@@ -5515,7 +5515,7 @@ obj_key_begin:
         while (char_is_space(*++cur));
         goto obj_key_begin;
     }
-    if (has_read_flag(ALLOW_COMMENTS)) {
+    if (has_flag(ALLOW_COMMENTS)) {
         if (skip_spaces_and_comments(&cur)) goto obj_key_begin;
         if (byte_match_2(cur, "/*")) goto fail_comment;
     }
@@ -5534,7 +5534,7 @@ obj_key_end:
         while (char_is_space(*++cur));
         goto obj_key_end;
     }
-    if (has_read_flag(ALLOW_COMMENTS)) {
+    if (has_flag(ALLOW_COMMENTS)) {
         if (skip_spaces_and_comments(&cur)) goto obj_key_end;
         if (byte_match_2(cur, "/*")) goto fail_comment;
     }
@@ -5577,7 +5577,7 @@ obj_val_begin:
         val++;
         ctn_len++;
         if (likely(read_null(&cur, val))) goto obj_val_end;
-        if (has_read_flag(ALLOW_INF_AND_NAN)) {
+        if (has_flag(ALLOW_INF_AND_NAN)) {
             if (read_nan(false, &cur, pre, val)) goto obj_val_end;
         }
         goto fail_literal;
@@ -5586,14 +5586,14 @@ obj_val_begin:
         while (char_is_space(*++cur));
         goto obj_val_begin;
     }
-    if (has_read_flag(ALLOW_INF_AND_NAN) &&
+    if (has_flag(ALLOW_INF_AND_NAN) &&
         (*cur == 'i' || *cur == 'I' || *cur == 'N')) {
         val++;
         ctn_len++;
         if (read_inf_or_nan(false, &cur, pre, val)) goto obj_val_end;
         goto fail_character;
     }
-    if (has_read_flag(ALLOW_COMMENTS)) {
+    if (has_flag(ALLOW_COMMENTS)) {
         if (skip_spaces_and_comments(&cur)) goto obj_val_begin;
         if (byte_match_2(cur, "/*")) goto fail_comment;
     }
@@ -5616,7 +5616,7 @@ obj_val_end:
         while (char_is_space(*++cur));
         goto obj_val_end;
     }
-    if (has_read_flag(ALLOW_COMMENTS)) {
+    if (has_flag(ALLOW_COMMENTS)) {
         if (skip_spaces_and_comments(&cur)) goto obj_val_end;
         if (byte_match_2(cur, "/*")) goto fail_comment;
     }
@@ -5640,8 +5640,8 @@ obj_end:
     
 doc_end:
     /* check invalid contents after json document */
-    if (unlikely(cur < end) && !has_read_flag(STOP_WHEN_DONE)) {
-        if (has_read_flag(ALLOW_COMMENTS)) {
+    if (unlikely(cur < end) && !has_flag(STOP_WHEN_DONE)) {
+        if (has_flag(ALLOW_COMMENTS)) {
             skip_spaces_and_comments(&cur);
             if (byte_match_2(cur, "/*")) goto fail_comment;
         } else {
@@ -5656,7 +5656,7 @@ doc_end:
     doc->alc = alc;
     doc->dat_read = (usize)(cur - hdr);
     doc->val_read = (usize)((val - val_hdr)) - hdr_len + 1;
-    doc->str_pool = has_read_flag(INSITU) ? NULL : (char *)hdr;
+    doc->str_pool = has_flag(INSITU) ? NULL : (char *)hdr;
     return doc;
     
 fail_string:
@@ -5696,7 +5696,7 @@ yyjson_doc *yyjson_read_opts(char *dat,
     err->pos = (usize)(_pos); \
     err->msg = _msg; \
     err->code = YYJSON_READ_ERROR_##_code; \
-    if (!has_read_flag(INSITU) && hdr) alc.free(alc.ctx, (void *)hdr); \
+    if (!has_flag(INSITU) && hdr) alc.free(alc.ctx, (void *)hdr); \
     return NULL; \
 } while (false)
     
@@ -5720,7 +5720,7 @@ yyjson_doc *yyjson_read_opts(char *dat,
     }
     
     /* add 4-byte zero padding for input data if necessary */
-    if (has_read_flag(INSITU)) {
+    if (has_flag(INSITU)) {
         hdr = (u8 *)dat;
         end = (u8 *)dat + len;
         cur = (u8 *)dat;
@@ -5740,7 +5740,7 @@ yyjson_doc *yyjson_read_opts(char *dat,
     
     /* skip empty contents before json document */
     if (unlikely(char_is_space_or_comment(*cur))) {
-        if (has_read_flag(ALLOW_COMMENTS)) {
+        if (has_flag(ALLOW_COMMENTS)) {
             if (!skip_spaces_and_comments(&cur)) {
                 return_err(cur - hdr, INVALID_COMMENT,
                            "unclosed multiline comment");
@@ -5786,7 +5786,7 @@ yyjson_doc *yyjson_read_opts(char *dat,
                 err->msg = "UTF-16 encoding is not supported";
             }
         }
-        if (!has_read_flag(INSITU)) alc.free(alc.ctx, (void *)hdr);
+        if (!has_flag(INSITU)) alc.free(alc.ctx, (void *)hdr);
     }
     return doc;
     
@@ -5933,7 +5933,7 @@ const char *yyjson_read_number(const char *dat,
     const char *msg;
     yyjson_read_err dummy_err;
     
-#if !YYJSON_HAS_IEEE_754 || YYJSON_DISABLE_FAST_FP_CONV
+#if YYJSON_DISABLE_FAST_FP_CONV
     u8 buf[128];
     usize dat_len;
 #endif
@@ -5946,7 +5946,7 @@ const char *yyjson_read_number(const char *dat,
         return_err(cur, INVALID_PARAMETER, "output value is NULL");
     }
     
-#if !YYJSON_HAS_IEEE_754 || YYJSON_DISABLE_FAST_FP_CONV
+#if YYJSON_DISABLE_FAST_FP_CONV
     if (!alc) alc = &YYJSON_DEFAULT_ALC;
     dat_len = strlen(dat);
     if (dat_len < sizeof(buf)) {
@@ -5968,7 +5968,7 @@ const char *yyjson_read_number(const char *dat,
     raw_end = NULL;
     pre = raw ? &raw_end : NULL;
     
-#if !YYJSON_HAS_IEEE_754 || YYJSON_DISABLE_FAST_FP_CONV
+#if YYJSON_DISABLE_FAST_FP_CONV
     if (!read_number(&cur, pre, flg, val, &msg)) {
         if (dat_len >= sizeof(buf)) alc->free(alc->ctx, hdr);
         return_err(cur, INVALID_NUMBER, msg);
@@ -6003,7 +6003,7 @@ const char *yyjson_read_number(const char *dat,
 
 #if !YYJSON_DISABLE_WRITER
 
-#define has_write_flag(_flag) unlikely(write_flag_eq(flg, YYJSON_WRITE_##_flag))
+#define has_flag(_flag) unlikely(write_flag_eq(flg, YYJSON_WRITE_##_flag))
 
 static_inline bool write_flag_eq(yyjson_write_flag flg, yyjson_write_flag chk) {
 #if YYJSON_DISABLE_NON_STANDARD
@@ -6406,9 +6406,9 @@ static_inline void f64_bin_to_dec(u64 sig_raw, u32 exp_raw,
     exp10 = -k;
     h = exp_bin + ((exp10 * 217707) >> 16) + 1;
     
-    pow10_table_get_sig(exp10, &pow10hi, &pow10lo);
-    pow10lo += (exp10 < POW10_SIG_TABLE_MIN_EXACT_EXP ||
-                exp10 > POW10_SIG_TABLE_MAX_EXACT_EXP);
+    u128_pow10_get_sig(exp10, &pow10hi, &pow10lo);
+    pow10lo += (exp10 < U128_POW10_MIN_EXACT_EXP ||
+                exp10 > U128_POW10_MAX_EXACT_EXP);
     vbl = round_to_odd(pow10hi, pow10lo, cbl << h);
     vb  = round_to_odd(pow10hi, pow10lo, cb  << h);
     vbr = round_to_odd(pow10hi, pow10lo, cbr << h);
@@ -6447,7 +6447,7 @@ static_inline void f64_bin_to_dec(u64 sig_raw, u32 exp_raw,
  2. Keep decimal point to indicate the number is floating point.
  3. Remove positive sign of exponent part.
  */
-static_inline u8 *write_f64_raw(u8 *buf, u64 raw, yyjson_write_flag flg) {
+static_inline u8 *write_f64_bin(u8 *buf, u64 raw, yyjson_write_flag flg) {
     u64 sig_bin, sig_dec, sig_raw;
     i32 exp_bin, exp_dec, sig_len, dot_pos, i, max;
     u32 exp_raw, hi, lo;
@@ -6461,10 +6461,10 @@ static_inline u8 *write_f64_raw(u8 *buf, u64 raw, yyjson_write_flag flg) {
     
     /* return inf and nan */
     if (unlikely(exp_raw == ((u32)1 << F64_EXP_BITS) - 1)) {
-        if (has_write_flag(INF_AND_NAN_AS_NULL)) {
+        if (has_flag(INF_AND_NAN_AS_NULL)) {
             byte_copy_4(buf, "null");
             return buf + 4;
-        } else if (has_write_flag(ALLOW_INF_AND_NAN)) {
+        } else if (has_flag(ALLOW_INF_AND_NAN)) {
             if (sig_raw == 0) {
                 buf[0] = '-';
                 buf += sign;
@@ -6599,7 +6599,7 @@ static_inline u8 *write_f64_raw(u8 *buf, u64 raw, yyjson_write_flag flg) {
  This is the fallback function when `FAST_FP_CONV` is disabled.
  This function use libc's sprintf() to write floating-point number.
  */
-static_inline u8 *write_f64_raw(u8 *buf, u64 raw, yyjson_write_flag flg) {
+static_inline u8 *write_f64_bin(u8 *buf, u64 raw, yyjson_write_flag flg) {
     /*
      For IEEE 754, `DBL_DECIMAL_DIG` is 17 for round-trip.
      For non-IEEE formats, 17 is used to avoid buffer overflow,
@@ -6617,7 +6617,7 @@ static_inline u8 *write_f64_raw(u8 *buf, u64 raw, yyjson_write_flag flg) {
      locales use ',' as the decimal point. we need to replace ',' with '.'
      to avoid the locale setting.
      */
-    f64 val = f64_from_raw(raw);
+    f64 val = f64_from_bin(raw);
 #if YYJSON_MSC_VER >= 1400
     int len = sprintf_s((char *)buf, 32, "%.*g", dig, val);
 #elif defined(snprintf) || (YYJSON_STDC_VER >= 199901L)
@@ -6631,10 +6631,10 @@ static_inline u8 *write_f64_raw(u8 *buf, u64 raw, yyjson_write_flag flg) {
     cur += (*cur == '-');
     if (unlikely(!digi_is_digit(*cur))) {
         /* nan, inf, or bad output */
-        if (has_write_flag(INF_AND_NAN_AS_NULL)) {
+        if (has_flag(INF_AND_NAN_AS_NULL)) {
             byte_copy_4(buf, "null");
             return buf + 4;
-        } else if (has_write_flag(ALLOW_INF_AND_NAN)) {
+        } else if (has_flag(ALLOW_INF_AND_NAN)) {
             if (*cur == 'i') {
                 byte_copy_8(cur, "Infinity");
                 cur += 8;
@@ -6668,7 +6668,7 @@ static_inline u8 *write_number(u8 *cur, yyjson_val *val,
                                yyjson_write_flag flg) {
     if (val->tag & YYJSON_SUBTYPE_REAL) {
         u64 raw = val->uni.u64;
-        return write_f64_raw(cur, raw, flg);
+        return write_f64_bin(cur, raw, flg);
     } else {
         u64 pos = val->uni.u64;
         u64 neg = ~pos + 1;
@@ -6923,14 +6923,14 @@ static const u8 esc_single_char_table[512] = {
 /** Returns the encode table with options. */
 static_inline const char_enc_type *get_enc_table_with_flag(
     yyjson_read_flag flg) {
-    if (has_write_flag(ESCAPE_UNICODE)) {
-        if (has_write_flag(ESCAPE_SLASHES)) {
+    if (has_flag(ESCAPE_UNICODE)) {
+        if (has_flag(ESCAPE_SLASHES)) {
             return enc_table_esc_slash;
         } else {
             return enc_table_esc;
         }
     } else {
-        if (has_write_flag(ESCAPE_SLASHES)) {
+        if (has_flag(ESCAPE_SLASHES)) {
             return enc_table_cpy_slash;
         } else {
             return enc_table_cpy;
@@ -7071,10 +7071,10 @@ copy_ascii:
     /*
      Copy continuous ASCII, loop unrolling, same as the following code:
      
-         while (end > src) (
-            if (unlikely(enc_table[*src])) break;
-            *cur++ = *src++;
-         );
+     while (end > src) {
+         if (unlikely(enc_table[*src])) goto copy_utf8;
+         *cur++ = *src++;
+     }
      */
 #define expr_jump(i) \
     if (unlikely(enc_table[src[i]])) goto stop_char_##i;
@@ -7089,18 +7089,15 @@ copy_ascii:
         byte_copy_16(cur, src);
         cur += 16; src += 16;
     }
-    
     while (end - src >= 4) {
         repeat4_incr(expr_jump)
         byte_copy_4(cur, src);
         cur += 4; src += 4;
     }
-    
     while (end > src) {
         expr_jump(0)
         *cur++ = *src++;
     }
-    
     *cur++ = '"';
     return cur;
     
@@ -7395,9 +7392,9 @@ static_inline u8 *yyjson_write_single(yyjson_val *val,
     const u8 *str_ptr;
     const char_enc_type *enc_table = get_enc_table_with_flag(flg);
     bool cpy = (enc_table == enc_table_cpy);
-    bool esc = has_write_flag(ESCAPE_UNICODE) != 0;
-    bool inv = has_write_flag(ALLOW_INVALID_UNICODE) != 0;
-    bool newline = has_write_flag(NEWLINE_AT_END) != 0;
+    bool esc = has_flag(ESCAPE_UNICODE) != 0;
+    bool inv = has_flag(ALLOW_INVALID_UNICODE) != 0;
+    bool newline = has_flag(NEWLINE_AT_END) != 0;
     const usize end_len = 2; /* '\n' and '\0' */
     
     switch (unsafe_yyjson_get_type(val)) {
@@ -7525,9 +7522,9 @@ static_inline u8 *yyjson_write_minify(const yyjson_val *root,
     const u8 *str_ptr;
     const char_enc_type *enc_table = get_enc_table_with_flag(flg);
     bool cpy = (enc_table == enc_table_cpy);
-    bool esc = has_write_flag(ESCAPE_UNICODE) != 0;
-    bool inv = has_write_flag(ALLOW_INVALID_UNICODE) != 0;
-    bool newline = has_write_flag(NEWLINE_AT_END) != 0;
+    bool esc = has_flag(ESCAPE_UNICODE) != 0;
+    bool inv = has_flag(ALLOW_INVALID_UNICODE) != 0;
+    bool newline = has_flag(NEWLINE_AT_END) != 0;
     
     alc_len = root->uni.ofs / sizeof(yyjson_val);
     alc_len = alc_len * YYJSON_WRITER_ESTIMATED_MINIFY_RATIO + 64;
@@ -7709,10 +7706,10 @@ static_inline u8 *yyjson_write_pretty(const yyjson_val *root,
     const u8 *str_ptr;
     const char_enc_type *enc_table = get_enc_table_with_flag(flg);
     bool cpy = (enc_table == enc_table_cpy);
-    bool esc = has_write_flag(ESCAPE_UNICODE) != 0;
-    bool inv = has_write_flag(ALLOW_INVALID_UNICODE) != 0;
-    usize spaces = has_write_flag(PRETTY_TWO_SPACES) ? 2 : 4;
-    bool newline = has_write_flag(NEWLINE_AT_END) != 0;
+    bool esc = has_flag(ESCAPE_UNICODE) != 0;
+    bool inv = has_flag(ALLOW_INVALID_UNICODE) != 0;
+    usize spaces = has_flag(PRETTY_TWO_SPACES) ? 2 : 4;
+    bool newline = has_flag(NEWLINE_AT_END) != 0;
     
     alc_len = root->uni.ofs / sizeof(yyjson_val);
     alc_len = alc_len * YYJSON_WRITER_ESTIMATED_PRETTY_RATIO + 64;
@@ -8077,9 +8074,9 @@ static_inline u8 *yyjson_mut_write_minify(const yyjson_mut_val *root,
     const u8 *str_ptr;
     const char_enc_type *enc_table = get_enc_table_with_flag(flg);
     bool cpy = (enc_table == enc_table_cpy);
-    bool esc = has_write_flag(ESCAPE_UNICODE) != 0;
-    bool inv = has_write_flag(ALLOW_INVALID_UNICODE) != 0;
-    bool newline = has_write_flag(NEWLINE_AT_END) != 0;
+    bool esc = has_flag(ESCAPE_UNICODE) != 0;
+    bool inv = has_flag(ALLOW_INVALID_UNICODE) != 0;
+    bool newline = has_flag(NEWLINE_AT_END) != 0;
     
     alc_len = estimated_val_num * YYJSON_WRITER_ESTIMATED_MINIFY_RATIO + 64;
     alc_len = size_align_up(alc_len, sizeof(yyjson_mut_write_ctx));
@@ -8267,10 +8264,10 @@ static_inline u8 *yyjson_mut_write_pretty(const yyjson_mut_val *root,
     const u8 *str_ptr;
     const char_enc_type *enc_table = get_enc_table_with_flag(flg);
     bool cpy = (enc_table == enc_table_cpy);
-    bool esc = has_write_flag(ESCAPE_UNICODE) != 0;
-    bool inv = has_write_flag(ALLOW_INVALID_UNICODE) != 0;
-    usize spaces = has_write_flag(PRETTY_TWO_SPACES) ? 2 : 4;
-    bool newline = has_write_flag(NEWLINE_AT_END) != 0;
+    bool esc = has_flag(ESCAPE_UNICODE) != 0;
+    bool inv = has_flag(ALLOW_INVALID_UNICODE) != 0;
+    usize spaces = has_flag(PRETTY_TWO_SPACES) ? 2 : 4;
+    bool newline = has_flag(NEWLINE_AT_END) != 0;
     
     alc_len = estimated_val_num * YYJSON_WRITER_ESTIMATED_PRETTY_RATIO + 64;
     alc_len = size_align_up(alc_len, sizeof(yyjson_mut_write_ctx));
