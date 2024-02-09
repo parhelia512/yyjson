@@ -26,7 +26,7 @@
 
 
 /*==============================================================================
- * Warning Suppress
+ * Warning Suppress (Private)
  *============================================================================*/
 
 #if defined(__clang__)
@@ -62,7 +62,7 @@ uint32_t yyjson_version(void) {
 
 
 /*==============================================================================
- * Flags
+ * Flags (Private)
  *============================================================================*/
 
 /* msvc intrinsic */
@@ -181,7 +181,20 @@ uint32_t yyjson_version(void) {
 #   define YYJSON_DOUBLE_MATH_CORRECT 1
 #endif
 
-/* endian */
+/*
+ Detect the endianness at compile-time.
+ 
+ The following code will detect the endianness by some common macro,
+ and produce one of three results:
+ 
+ YYJSON_ENDIAN == YYJSON_BIG_ENDIAN
+ YYJSON_ENDIAN == YYJSON_LITTLE_ENDIAN
+ YYJSON_ENDIAN == YYJSON_UNKNOWN_ENDIAN
+ */
+#define YYJSON_BIG_ENDIAN       4321
+#define YYJSON_LITTLE_ENDIAN    1234
+#define YYJSON_UNKNOWN_ENDIAN   0
+
 #if yyjson_has_include(<sys/types.h>)
 #    include <sys/types.h> /* POSIX */
 #endif
@@ -192,9 +205,6 @@ uint32_t yyjson_version(void) {
 #elif yyjson_has_include(<machine/endian.h>)
 #    include <machine/endian.h> /* BSD, Darwin */
 #endif
-
-#define YYJSON_BIG_ENDIAN       4321
-#define YYJSON_LITTLE_ENDIAN    1234
 
 #if defined(BYTE_ORDER) && BYTE_ORDER
 #   if defined(BIG_ENDIAN) && (BYTE_ORDER == BIG_ENDIAN)
@@ -240,7 +250,7 @@ uint32_t yyjson_version(void) {
 #   define YYJSON_ENDIAN YYJSON_BIG_ENDIAN
 
 #else
-#   define YYJSON_ENDIAN 0 /* unknown endian, detect at run-time */
+#   define YYJSON_ENDIAN YYJSON_UNKNOWN_ENDIAN
 #endif
 
 /*
@@ -323,6 +333,10 @@ uint32_t yyjson_version(void) {
 #ifndef YYJSON_DISABLE_FAST_FP_CONV
 #define YYJSON_DISABLE_FAST_FP_CONV 0
 #endif
+#if    !YYJSON_HAS_IEEE_754
+#undef  YYJSON_DISABLE_FAST_FP_CONV
+#define YYJSON_DISABLE_FAST_FP_CONV 1
+#endif
 #ifndef YYJSON_DISABLE_NON_STANDARD
 #define YYJSON_DISABLE_NON_STANDARD 0
 #endif
@@ -333,8 +347,20 @@ uint32_t yyjson_version(void) {
 
 
 /*==============================================================================
- * Macros
+ * Macros (Private)
  *============================================================================*/
+
+/* Used to write u64 literal for C89 which doesn't support "ULL" suffix. */
+#undef  U64
+#define U64(hi, lo) ((((u64)hi##UL) << 32U) + lo##UL)
+
+/* U64 constant values */
+#undef  U64_MAX
+#define U64_MAX         U64(0xFFFFFFFF, 0xFFFFFFFF)
+#undef  I64_MAX
+#define I64_MAX         U64(0x7FFFFFFF, 0xFFFFFFFF)
+#undef  USIZE_MAX
+#define USIZE_MAX       ((usize)(~(usize)0))
 
 /* Macros used for loop unrolling and other purpose. */
 #define repeat2(x)  { x x }
@@ -371,118 +397,13 @@ uint32_t yyjson_version(void) {
 #undef  yyjson_max
 #define yyjson_max(x, y) ((x) > (y) ? (x) : (y))
 
-/* Used to write u64 literal for C89 which doesn't support "ULL" suffix. */
-#undef  U64
-#define U64(hi, lo) ((((u64)hi##UL) << 32U) + lo##UL)
-
 /* Used to cast away (remove) const qualifier. */
 #define constcast(type) (type)(void *)(size_t)(const void *)
 
-/* flag test */
-#define has_read_flag(_flag) unlikely(read_flag_eq(flg, YYJSON_READ_##_flag))
-#define has_write_flag(_flag) unlikely(write_flag_eq(flg, YYJSON_WRITE_##_flag))
-
-static_inline bool read_flag_eq(yyjson_read_flag flg, yyjson_read_flag chk) {
-#if YYJSON_DISABLE_NON_STANDARD
-    if (chk == YYJSON_READ_ALLOW_INF_AND_NAN ||
-        chk == YYJSON_READ_ALLOW_COMMENTS ||
-        chk == YYJSON_READ_ALLOW_TRAILING_COMMAS ||
-        chk == YYJSON_READ_ALLOW_INVALID_UNICODE)
-        return false; /* this should be evaluated at compile-time */
-#endif
-    return (flg & chk) != 0;
-}
-
-static_inline bool write_flag_eq(yyjson_write_flag flg, yyjson_write_flag chk) {
-#if YYJSON_DISABLE_NON_STANDARD
-    if (chk == YYJSON_WRITE_ALLOW_INF_AND_NAN ||
-        chk == YYJSON_WRITE_ALLOW_INVALID_UNICODE)
-        return false; /* this should be evaluated at compile-time */
-#endif
-    return (flg & chk) != 0;
-}
-
 
 
 /*==============================================================================
- * Integer Constants
- *============================================================================*/
-
-/* U64 constant values */
-#undef  U64_MAX
-#define U64_MAX         U64(0xFFFFFFFF, 0xFFFFFFFF)
-#undef  I64_MAX
-#define I64_MAX         U64(0x7FFFFFFF, 0xFFFFFFFF)
-#undef  USIZE_MAX
-#define USIZE_MAX       ((usize)(~(usize)0))
-
-/* Maximum number of digits for reading u32/u64/usize safety (not overflow). */
-#undef  U32_SAFE_DIG
-#define U32_SAFE_DIG    9   /* u32 max is 4294967295, 10 digits */
-#undef  U64_SAFE_DIG
-#define U64_SAFE_DIG    19  /* u64 max is 18446744073709551615, 20 digits */
-#undef  USIZE_SAFE_DIG
-#define USIZE_SAFE_DIG  (sizeof(usize) == 8 ? U64_SAFE_DIG : U32_SAFE_DIG)
-
-
-
-/*==============================================================================
- * IEEE-754 Double Number Constants
- *============================================================================*/
-
-/* Inf raw value (positive) */
-#define F64_RAW_INF U64(0x7FF00000, 0x00000000)
-
-/* NaN raw value (quiet NaN, no payload, no sign) */
-#if defined(__hppa__) || (defined(__mips__) && !defined(__mips_nan2008))
-#define F64_RAW_NAN U64(0x7FF7FFFF, 0xFFFFFFFF)
-#else
-#define F64_RAW_NAN U64(0x7FF80000, 0x00000000)
-#endif
-
-/* double number bits */
-#define F64_BITS 64
-
-/* double number exponent part bits */
-#define F64_EXP_BITS 11
-
-/* double number significand part bits */
-#define F64_SIG_BITS 52
-
-/* double number significand part bits (with 1 hidden bit) */
-#define F64_SIG_FULL_BITS 53
-
-/* double number significand bit mask */
-#define F64_SIG_MASK U64(0x000FFFFF, 0xFFFFFFFF)
-
-/* double number exponent bit mask */
-#define F64_EXP_MASK U64(0x7FF00000, 0x00000000)
-
-/* double number exponent bias */
-#define F64_EXP_BIAS 1023
-
-/* double number significant digits count in decimal */
-#define F64_DEC_DIG 17
-
-/* max significant digits count in decimal when reading double number */
-#define F64_MAX_DEC_DIG 768
-
-/* maximum decimal power of double number (1.7976931348623157e308) */
-#define F64_MAX_DEC_EXP 308
-
-/* minimum decimal power of double number (4.9406564584124654e-324) */
-#define F64_MIN_DEC_EXP (-324)
-
-/* maximum binary power of double number */
-#define F64_MAX_BIN_EXP 1024
-
-/* minimum binary power of double number */
-#define F64_MIN_BIN_EXP (-1021)
-
-
-
-/*==============================================================================
- * Types
+ * Types (Private)
  *============================================================================*/
 
 /** Type define for primitive types. */
@@ -517,7 +438,7 @@ typedef union v64_uni { v64 v; u64 u; } v64_uni;
 
 
 /*==============================================================================
- * Load/Store Utils
+ * Load/Store Utils (Private)
  *============================================================================*/
 
 #if YYJSON_DISABLE_UNALIGNED_MEMORY_ACCESS
@@ -597,7 +518,7 @@ static_inline u32 byte_load_4(const void *src) {
 
 #undef byte_move_expr
 
-#else
+#else /* YYJSON_DISABLE_UNALIGNED_MEMORY_ACCESS */
 
 static_inline void byte_copy_2(void *dst, const void *src) {
     memcpy(dst, src, 2);
@@ -677,2101 +598,293 @@ static_inline u32 byte_load_4(const void *src) {
     return uni.u;
 }
 
-#endif
+#endif /* YYJSON_DISABLE_UNALIGNED_MEMORY_ACCESS */
 
 
 
 /*==============================================================================
- * Number Utils
- * These functions are used to detect and convert NaN and Inf numbers.
+ * JSON Character Type (Private)
  *============================================================================*/
 
-/** Convert raw binary to double. */
-static_inline f64 f64_from_raw(u64 u) {
-    /* use memcpy to avoid violating the strict aliasing rule */
-    f64 f;
-    memcpy(&f, &u, 8);
-    return f;
-}
+/** Character type */
+typedef u8 char_type;
 
-/** Convert double to raw binary. */
-static_inline u64 f64_to_raw(f64 f) {
-    /* use memcpy to avoid violating the strict aliasing rule */
-    u64 u;
-    memcpy(&u, &f, 8);
-    return u;
-}
+/** Whitespace character: ' ', '\\t', '\\n', '\\r'. */
+static const char_type CHAR_TYPE_SPACE      = 1 << 0;
 
-/** Get raw 'infinity' with sign. */
-static_inline u64 f64_raw_get_inf(bool sign) {
-#if YYJSON_HAS_IEEE_754
-    return F64_RAW_INF | ((u64)sign << 63);
-#elif defined(INFINITY)
-    return f64_to_raw(sign ? -INFINITY : INFINITY);
-#else
-    return f64_to_raw(sign ? -HUGE_VAL : HUGE_VAL);
-#endif
-}
+/** Number character: '-', [0-9]. */
+static const char_type CHAR_TYPE_NUMBER     = 1 << 1;
 
-/** Get raw 'nan' with sign. */
-static_inline u64 f64_raw_get_nan(bool sign) {
-#if YYJSON_HAS_IEEE_754
-    return F64_RAW_NAN | ((u64)sign << 63);
-#elif defined(NAN)
-    return f64_to_raw(sign ? (f64)-NAN : (f64)NAN);
-#else
-    return f64_to_raw((sign ? -0.0 : 0.0) / 0.0);
-#endif
-}
+/** JSON Escaped character: '"', '\', [0x00-0x1F]. */
+static const char_type CHAR_TYPE_ESC_ASCII  = 1 << 2;
 
-/**
- Convert normalized u64 (highest bit is 1) to f64.
- 
- Some compiler (such as Microsoft Visual C++ 6.0) do not support converting
- number from u64 to f64. This function will first convert u64 to i64 and then
- to f64, with `to nearest` rounding mode.
- */
-static_inline f64 normalized_u64_to_f64(u64 val) {
-#if YYJSON_U64_TO_F64_NO_IMPL
-    i64 sig = (i64)((val >> 1) | (val & 1));
-    return ((f64)sig) * (f64)2.0;
-#else
-    return (f64)val;
-#endif
-}
+/** Non-ASCII character: [0x80-0xFF]. */
+static const char_type CHAR_TYPE_NON_ASCII  = 1 << 3;
 
+/** JSON container character: '{', '['. */
+static const char_type CHAR_TYPE_CONTAINER  = 1 << 4;
 
+/** Comment character: '/'. */
+static const char_type CHAR_TYPE_COMMENT    = 1 << 5;
 
-/*==============================================================================
- * Size Utils
- * These functions are used for memory allocation.
- *============================================================================*/
+/** Line end character: '\\n', '\\r', '\0'. */
+static const char_type CHAR_TYPE_LINE_END   = 1 << 6;
 
-/** Returns whether the size is overflow after increment. */
-static_inline bool size_add_is_overflow(usize size, usize add) {
-    return size > (size + add);
-}
+/** Hexadecimal numeric character: [0-9a-fA-F]. */
+static const char_type CHAR_TYPE_HEX        = 1 << 7;
 
-/** Returns whether the size is power of 2 (size should not be 0). */
-static_inline bool size_is_pow2(usize size) {
-    return (size & (size - 1)) == 0;
-}
-
-/** Align size upwards (may overflow). */
-static_inline usize size_align_up(usize size, usize align) {
-    if (size_is_pow2(align)) {
-        return (size + (align - 1)) & ~(align - 1);
-    } else {
-        return size + align - (size + align - 1) % align - 1;
-    }
-}
-
-/** Align size downwards. */
-static_inline usize size_align_down(usize size, usize align) {
-    if (size_is_pow2(align)) {
-        return size & ~(align - 1);
-    } else {
-        return size - (size % align);
-    }
-}
-
-/** Align address upwards (may overflow). */
-static_inline void *mem_align_up(void *mem, usize align) {
-    usize size;
-    memcpy(&size, &mem, sizeof(usize));
-    size = size_align_up(size, align);
-    memcpy(&mem, &size, sizeof(usize));
-    return mem;
-}
-
-
-
-/*==============================================================================
- * Bits Utils
- * These functions are used by the floating-point number reader and writer.
- *============================================================================*/
-
-/** Returns the number of leading 0-bits in value (input should not be 0). */
-static_inline u32 u64_lz_bits(u64 v) {
-#if GCC_HAS_CLZLL
-    return (u32)__builtin_clzll(v);
-#elif MSC_HAS_BIT_SCAN_64
-    unsigned long r;
-    _BitScanReverse64(&r, v);
-    return (u32)63 - (u32)r;
-#elif MSC_HAS_BIT_SCAN
-    unsigned long hi, lo;
-    bool hi_set = _BitScanReverse(&hi, (u32)(v >> 32)) != 0;
-    _BitScanReverse(&lo, (u32)v);
-    hi |= 32;
-    return (u32)63 - (u32)(hi_set ? hi : lo);
-#else
-    /*
-     branchless, use de Bruijn sequences
-     see: https://www.chessprogramming.org/BitScan
-     */
-    const u8 table[64] = {
-        63, 16, 62,  7, 15, 36, 61,  3,  6, 14, 22, 26, 35, 47, 60,  2,
-         9,  5, 28, 11, 13, 21, 42, 19, 25, 31, 34, 40, 46, 52, 59,  1,
-        17,  8, 37,  4, 23, 27, 48, 10, 29, 12, 43, 20, 32, 41, 53, 18,
-        38, 24, 49, 30, 44, 33, 54, 39, 50, 45, 55, 51, 56, 57, 58,  0
-    };
-    v |= v >> 1;
-    v |= v >> 2;
-    v |= v >> 4;
-    v |= v >> 8;
-    v |= v >> 16;
-    v |= v >> 32;
-    return table[(v * U64(0x03F79D71, 0xB4CB0A89)) >> 58];
-#endif
-}
-
-/** Returns the number of trailing 0-bits in value (input should not be 0). */
-static_inline u32 u64_tz_bits(u64 v) {
-#if GCC_HAS_CTZLL
-    return (u32)__builtin_ctzll(v);
-#elif MSC_HAS_BIT_SCAN_64
-    unsigned long r;
-    _BitScanForward64(&r, v);
-    return (u32)r;
-#elif MSC_HAS_BIT_SCAN
-    unsigned long lo, hi;
-    bool lo_set = _BitScanForward(&lo, (u32)(v)) != 0;
-    _BitScanForward(&hi, (u32)(v >> 32));
-    hi += 32;
-    return lo_set ? lo : hi;
-#else
-    /*
-     branchless, use de Bruijn sequences
-     see: https://www.chessprogramming.org/BitScan
-     */
-    const u8 table[64] = {
-         0,  1,  2, 53,  3,  7, 54, 27,  4, 38, 41,  8, 34, 55, 48, 28,
-        62,  5, 39, 46, 44, 42, 22,  9, 24, 35, 59, 56, 49, 18, 29, 11,
-        63, 52,  6, 26, 37, 40, 33, 47, 61, 45, 43, 21, 23, 58, 17, 10,
-        51, 25, 36, 32, 60, 20, 57, 16, 50, 31, 19, 15, 30, 14, 13, 12
-    };
-    return table[((v & (~v + 1)) * U64(0x022FDD63, 0xCC95386D)) >> 58];
-#endif
-}
-
-
-
-/*==============================================================================
- * 128-bit Integer Utils
- * These functions are used by the floating-point number reader and writer.
- *============================================================================*/
-
-/** Multiplies two 64-bit unsigned integers (a * b),
-    returns the 128-bit result as 'hi' and 'lo'. */
-static_inline void u128_mul(u64 a, u64 b, u64 *hi, u64 *lo) {
-#if YYJSON_HAS_INT128
-    u128 m = (u128)a * b;
-    *hi = (u64)(m >> 64);
-    *lo = (u64)(m);
-#elif MSC_HAS_UMUL128
-    *lo = _umul128(a, b, hi);
-#else
-    u32 a0 = (u32)(a), a1 = (u32)(a >> 32);
-    u32 b0 = (u32)(b), b1 = (u32)(b >> 32);
-    u64 p00 = (u64)a0 * b0, p01 = (u64)a0 * b1;
-    u64 p10 = (u64)a1 * b0, p11 = (u64)a1 * b1;
-    u64 m0 = p01 + (p00 >> 32);
-    u32 m00 = (u32)(m0), m01 = (u32)(m0 >> 32);
-    u64 m1 = p10 + m00;
-    u32 m10 = (u32)(m1), m11 = (u32)(m1 >> 32);
-    *hi = p11 + m01 + m11;
-    *lo = ((u64)m10 << 32) | (u32)p00;
-#endif
-}
-
-/** Multiplies two 64-bit unsigned integers and add a value (a * b + c),
-    returns the 128-bit result as 'hi' and 'lo'. */
-static_inline void u128_mul_add(u64 a, u64 b, u64 c, u64 *hi, u64 *lo) {
-#if YYJSON_HAS_INT128
-    u128 m = (u128)a * b + c;
-    *hi = (u64)(m >> 64);
-    *lo = (u64)(m);
-#else
-    u64 h, l, t;
-    u128_mul(a, b, &h, &l);
-    t = l + c;
-    h += (u64)(((t < l) | (t < c)));
-    *hi = h;
-    *lo = t;
-#endif
-}
-
-
-
-/*==============================================================================
- * File Utils
- * These functions are used to read and write JSON files.
- *============================================================================*/
-
-#define YYJSON_FOPEN_EXT
-#if !defined(_MSC_VER) && defined(__GLIBC__) && defined(__GLIBC_PREREQ)
-#   if __GLIBC_PREREQ(2, 7)
-#       undef YYJSON_FOPEN_EXT
-#       define YYJSON_FOPEN_EXT "e" /* glibc extension to enable O_CLOEXEC */
-#   endif
-#endif
-
-static_inline FILE *fopen_safe(const char *path, const char *mode) {
-#if YYJSON_MSC_VER >= 1400
-    FILE *file = NULL;
-    if (fopen_s(&file, path, mode) != 0) return NULL;
-    return file;
-#else
-    return fopen(path, mode);
-#endif
-}
-
-static_inline FILE *fopen_readonly(const char *path) {
-    return fopen_safe(path, "rb" YYJSON_FOPEN_EXT);
-}
-
-static_inline FILE *fopen_writeonly(const char *path) {
-    return fopen_safe(path, "wb" YYJSON_FOPEN_EXT);
-}
-
-static_inline usize fread_safe(void *buf, usize size, FILE *file) {
-#if YYJSON_MSC_VER >= 1400
-    return fread_s(buf, size, 1, size, file);
-#else
-    return fread(buf, 1, size, file);
-#endif
-}
-
-
-
-/*==============================================================================
- * Default Memory Allocator
- * This is a simple libc memory allocator wrapper.
- *============================================================================*/
-
-static void *default_malloc(void *ctx, usize size) {
-    return malloc(size);
-}
-
-static void *default_realloc(void *ctx, void *ptr, usize old_size, usize size) {
-    return realloc(ptr, size);
-}
-
-static void default_free(void *ctx, void *ptr) {
-    free(ptr);
-}
-
-static const yyjson_alc YYJSON_DEFAULT_ALC = {
-    default_malloc,
-    default_realloc,
-    default_free,
-    NULL
+/** Character type table (generate with misc/make_tables.c) */
+static const char_type char_table[256] = {
+    0x44, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04,
+    0x04, 0x05, 0x45, 0x04, 0x04, 0x45, 0x04, 0x04,
+    0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04,
+    0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04,
+    0x01, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x20,
+    0x82, 0x82, 0x82, 0x82, 0x82, 0x82, 0x82, 0x82,
+    0x82, 0x82, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x10, 0x04, 0x00, 0x00, 0x00,
+    0x00, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00,
+    0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
+    0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
+    0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
+    0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
+    0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
+    0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
+    0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
+    0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
+    0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
+    0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
+    0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
+    0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
+    0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
+    0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
+    0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
+    0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08
 };
 
+/** Match a character with specified type. */
+static_inline bool char_is_type(u8 c, char_type type) {
+    return (char_table[c] & type) != 0;
+}
+
+/** Match a whitespace: ' ', '\\t', '\\n', '\\r'. */
+static_inline bool char_is_space(u8 c) {
+    return char_is_type(c, (char_type)CHAR_TYPE_SPACE);
+}
+
+/** Match a whitespace or comment: ' ', '\\t', '\\n', '\\r', '/'. */
+static_inline bool char_is_space_or_comment(u8 c) {
+    return char_is_type(c, (char_type)(CHAR_TYPE_SPACE | CHAR_TYPE_COMMENT));
+}
+
+/** Match a JSON number: '-', [0-9]. */
+static_inline bool char_is_number(u8 c) {
+    return char_is_type(c, (char_type)CHAR_TYPE_NUMBER);
+}
+
+/** Match a JSON container: '{', '['. */
+static_inline bool char_is_container(u8 c) {
+    return char_is_type(c, (char_type)CHAR_TYPE_CONTAINER);
+}
+
+/** Match a stop character in ASCII string: '"', '\', [0x00-0x1F,0x80-0xFF]. */
+static_inline bool char_is_ascii_stop(u8 c) {
+    return char_is_type(c, (char_type)(CHAR_TYPE_ESC_ASCII |
+                                       CHAR_TYPE_NON_ASCII));
+}
+
+/** Match a line end character: '\\n', '\\r', '\0'. */
+static_inline bool char_is_line_end(u8 c) {
+    return char_is_type(c, (char_type)CHAR_TYPE_LINE_END);
+}
+
+/** Match a hexadecimal numeric character: [0-9a-fA-F]. */
+static_inline bool char_is_hex(u8 c) {
+    return char_is_type(c, (char_type)CHAR_TYPE_HEX);
+}
+
 
 
 /*==============================================================================
- * Null Memory Allocator
- *
- * This allocator is just a placeholder to ensure that the internal
- * malloc/realloc/free function pointers are not null.
+ * Digit Character Type (Private)
  *============================================================================*/
 
-static void *null_malloc(void *ctx, usize size) {
-    return NULL;
-}
+/** Digit type */
+typedef u8 digi_type;
 
-static void *null_realloc(void *ctx, void *ptr, usize old_size, usize size) {
-    return NULL;
-}
+/** Digit: '0'. */
+static const digi_type DIGI_TYPE_ZERO       = 1 << 0;
 
-static void null_free(void *ctx, void *ptr) {
-    return;
-}
+/** Digit: [1-9]. */
+static const digi_type DIGI_TYPE_NONZERO    = 1 << 1;
 
-static const yyjson_alc YYJSON_NULL_ALC = {
-    null_malloc,
-    null_realloc,
-    null_free,
-    NULL
+/** Plus sign (positive): '+'. */
+static const digi_type DIGI_TYPE_POS        = 1 << 2;
+
+/** Minus sign (negative): '-'. */
+static const digi_type DIGI_TYPE_NEG        = 1 << 3;
+
+/** Decimal point: '.' */
+static const digi_type DIGI_TYPE_DOT        = 1 << 4;
+
+/** Exponent sign: 'e, 'E'. */
+static const digi_type DIGI_TYPE_EXP        = 1 << 5;
+
+/** Digit type table (generate with misc/make_tables.c) */
+static const digi_type digi_table[256] = {
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x04, 0x00, 0x08, 0x10, 0x00,
+    0x01, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02,
+    0x02, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 };
 
-
-
-/*==============================================================================
- * Pool Memory Allocator
- *
- * This allocator is initialized with a fixed-size buffer.
- * The buffer is split into multiple memory chunks for memory allocation.
- *============================================================================*/
-
-/** memory chunk header */
-typedef struct pool_chunk {
-    usize size; /* chunk memory size, include chunk header */
-    struct pool_chunk *next; /* linked list, nullable */
-    /* char mem[]; flexible array member */
-} pool_chunk;
-
-/** allocator ctx header */
-typedef struct pool_ctx {
-    usize size; /* total memory size, include ctx header */
-    pool_chunk *free_list; /* linked list, nullable */
-    /* pool_chunk chunks[]; flexible array member */
-} pool_ctx;
-
-/** align up the input size to chunk size */
-static_inline void pool_size_align(usize *size) {
-    *size = size_align_up(*size, sizeof(pool_chunk)) + sizeof(pool_chunk);
+/** Match a character with specified type. */
+static_inline bool digi_is_type(u8 d, digi_type type) {
+    return (digi_table[d] & type) != 0;
 }
 
-static void *pool_malloc(void *ctx_ptr, usize size) {
-    /* assert(size != 0) */
-    pool_ctx *ctx = (pool_ctx *)ctx_ptr;
-    pool_chunk *next, *prev = NULL, *cur = ctx->free_list;
-    
-    if (unlikely(size >= ctx->size)) return NULL;
-    pool_size_align(&size);
-    
-    while (cur) {
-        if (cur->size < size) {
-            /* not enough space, try next chunk */
-            prev = cur;
-            cur = cur->next;
-            continue;
-        }
-        if (cur->size >= size + sizeof(pool_chunk) * 2) {
-            /* too much space, split this chunk */
-            next = (pool_chunk *)(void *)((u8 *)cur + size);
-            next->size = cur->size - size;
-            next->next = cur->next;
-            cur->size = size;
-        } else {
-            /* just enough space, use whole chunk */
-            next = cur->next;
-        }
-        if (prev) prev->next = next;
-        else ctx->free_list = next;
-        return (void *)(cur + 1);
-    }
-    return NULL;
+/** Match a sign: '+', '-' */
+static_inline bool digi_is_sign(u8 d) {
+    return digi_is_type(d, (digi_type)(DIGI_TYPE_POS | DIGI_TYPE_NEG));
 }
 
-static void pool_free(void *ctx_ptr, void *ptr) {
-    /* assert(ptr != NULL) */
-    pool_ctx *ctx = (pool_ctx *)ctx_ptr;
-    pool_chunk *cur = ((pool_chunk *)ptr) - 1;
-    pool_chunk *prev = NULL, *next = ctx->free_list;
-    
-    while (next && next < cur) {
-        prev = next;
-        next = next->next;
-    }
-    if (prev) prev->next = cur;
-    else ctx->free_list = cur;
-    cur->next = next;
-    
-    if (next && ((u8 *)cur + cur->size) == (u8 *)next) {
-        /* merge cur to higher chunk */
-        cur->size += next->size;
-        cur->next = next->next;
-    }
-    if (prev && ((u8 *)prev + prev->size) == (u8 *)cur) {
-        /* merge cur to lower chunk */
-        prev->size += cur->size;
-        prev->next = cur->next;
-    }
+/** Match a none zero digit: [1-9] */
+static_inline bool digi_is_nonzero(u8 d) {
+    return digi_is_type(d, (digi_type)DIGI_TYPE_NONZERO);
 }
 
-static void *pool_realloc(void *ctx_ptr, void *ptr,
-                          usize old_size, usize size) {
-    /* assert(ptr != NULL && size != 0 && old_size < size) */
-    pool_ctx *ctx = (pool_ctx *)ctx_ptr;
-    pool_chunk *cur = ((pool_chunk *)ptr) - 1, *prev, *next, *tmp;
-    
-    /* check size */
-    if (unlikely(size >= ctx->size)) return NULL;
-    pool_size_align(&old_size);
-    pool_size_align(&size);
-    if (unlikely(old_size == size)) return ptr;
-    
-    /* find next and prev chunk */
-    prev = NULL;
-    next = ctx->free_list;
-    while (next && next < cur) {
-        prev = next;
-        next = next->next;
-    }
-    
-    if ((u8 *)cur + cur->size == (u8 *)next && cur->size + next->size >= size) {
-        /* merge to higher chunk if they are contiguous */
-        usize free_size = cur->size + next->size - size;
-        if (free_size > sizeof(pool_chunk) * 2) {
-            tmp = (pool_chunk *)(void *)((u8 *)cur + size);
-            if (prev) prev->next = tmp;
-            else ctx->free_list = tmp;
-            tmp->next = next->next;
-            tmp->size = free_size;
-            cur->size = size;
-        } else {
-            if (prev) prev->next = next->next;
-            else ctx->free_list = next->next;
-            cur->size += next->size;
-        }
-        return ptr;
-    } else {
-        /* fallback to malloc and memcpy */
-        void *new_ptr = pool_malloc(ctx_ptr, size - sizeof(pool_chunk));
-        if (new_ptr) {
-            memcpy(new_ptr, ptr, cur->size - sizeof(pool_chunk));
-            pool_free(ctx_ptr, ptr);
-        }
-        return new_ptr;
-    }
+/** Match a digit: [0-9] */
+static_inline bool digi_is_digit(u8 d) {
+    return digi_is_type(d, (digi_type)(DIGI_TYPE_ZERO | DIGI_TYPE_NONZERO));
 }
 
-bool yyjson_alc_pool_init(yyjson_alc *alc, void *buf, usize size) {
-    pool_chunk *chunk;
-    pool_ctx *ctx;
-    
-    if (unlikely(!alc)) return false;
-    *alc = YYJSON_NULL_ALC;
-    if (size < sizeof(pool_ctx) * 4) return false;
-    ctx = (pool_ctx *)mem_align_up(buf, sizeof(pool_ctx));
-    if (unlikely(!ctx)) return false;
-    size -= (usize)((u8 *)ctx - (u8 *)buf);
-    size = size_align_down(size, sizeof(pool_ctx));
-    
-    chunk = (pool_chunk *)(ctx + 1);
-    chunk->size = size - sizeof(pool_ctx);
-    chunk->next = NULL;
-    ctx->size = size;
-    ctx->free_list = chunk;
-    
-    alc->malloc = pool_malloc;
-    alc->realloc = pool_realloc;
-    alc->free = pool_free;
-    alc->ctx = (void *)ctx;
-    return true;
+/** Match an exponent sign: 'e', 'E'. */
+static_inline bool digi_is_exp(u8 d) {
+    return digi_is_type(d, (digi_type)DIGI_TYPE_EXP);
+}
+
+/** Match a floating point indicator: '.', 'e', 'E'. */
+static_inline bool digi_is_fp(u8 d) {
+    return digi_is_type(d, (digi_type)(DIGI_TYPE_DOT | DIGI_TYPE_EXP));
+}
+
+/** Match a digit or floating point indicator: [0-9], '.', 'e', 'E'. */
+static_inline bool digi_is_digit_or_fp(u8 d) {
+    return digi_is_type(d, (digi_type)(DIGI_TYPE_ZERO | DIGI_TYPE_NONZERO |
+                                       DIGI_TYPE_DOT | DIGI_TYPE_EXP));
 }
 
 
 
 /*==============================================================================
- * Dynamic Memory Allocator
- *
- * This allocator allocates memory on demand and does not immediately release
- * unused memory. Instead, it places the unused memory into a freelist for
- * potential reuse in the future. It is only when the entire allocator is
- * destroyed that all previously allocated memory is released at once.
+ * Integer Constants (Private)
  *============================================================================*/
 
-/** memory chunk header */
-typedef struct dyn_chunk {
-    usize size; /* chunk size, include header */
-    struct dyn_chunk *next;
-    /* char mem[]; flexible array member */
-} dyn_chunk;
-
-/** allocator ctx header */
-typedef struct {
-    dyn_chunk free_list; /* dummy header, sorted from small to large */
-    dyn_chunk used_list; /* dummy header */
-} dyn_ctx;
-
-/** align up the input size to chunk size */
-static_inline bool dyn_size_align(usize *size) {
-    usize alc_size = *size + sizeof(dyn_chunk);
-    alc_size = size_align_up(alc_size, YYJSON_ALC_DYN_MIN_SIZE);
-    if (unlikely(alc_size < *size)) return false; /* overflow */
-    *size = alc_size;
-    return true;
-}
-
-/** remove a chunk from list (the chunk must already be in the list) */
-static_inline void dyn_chunk_list_remove(dyn_chunk *list, dyn_chunk *chunk) {
-    dyn_chunk *prev = list, *cur;
-    for (cur = prev->next; cur; cur = cur->next) {
-        if (cur == chunk) {
-            prev->next = cur->next;
-            cur->next = NULL;
-            return;
-        }
-        prev = cur;
-    }
-}
-
-/** add a chunk to list header (the chunk must not be in the list) */
-static_inline void dyn_chunk_list_add(dyn_chunk *list, dyn_chunk *chunk) {
-    chunk->next = list->next;
-    list->next = chunk;
-}
-
-static void *dyn_malloc(void *ctx_ptr, usize size) {
-    /* assert(size != 0) */
-    const yyjson_alc def = YYJSON_DEFAULT_ALC;
-    dyn_ctx *ctx = (dyn_ctx *)ctx_ptr;
-    dyn_chunk *chunk, *prev, *next;
-    if (unlikely(!dyn_size_align(&size))) return NULL;
-    
-    /* freelist is empty, create new chunk */
-    if (!ctx->free_list.next) {
-        chunk = (dyn_chunk *)def.malloc(def.ctx, size);
-        if (unlikely(!chunk)) return NULL;
-        chunk->size = size;
-        chunk->next = NULL;
-        dyn_chunk_list_add(&ctx->used_list, chunk);
-        return (void *)(chunk + 1);
-    }
-    
-    /* find a large enough chunk, or resize the largest chunk */
-    prev = &ctx->free_list;
-    while (true) {
-        chunk = prev->next;
-        if (chunk->size >= size) { /* enough size, reuse this chunk */
-            prev->next = chunk->next;
-            dyn_chunk_list_add(&ctx->used_list, chunk);
-            return (void *)(chunk + 1);
-        }
-        if (!chunk->next) { /* resize the largest chunk */
-            chunk = (dyn_chunk *)def.realloc(def.ctx, chunk, chunk->size, size);
-            if (unlikely(!chunk)) return NULL;
-            prev->next = NULL;
-            chunk->size = size;
-            dyn_chunk_list_add(&ctx->used_list, chunk);
-            return (void *)(chunk + 1);
-        }
-        prev = chunk;
-    }
-}
-
-static void *dyn_realloc(void *ctx_ptr, void *ptr,
-                          usize old_size, usize size) {
-    /* assert(ptr != NULL && size != 0 && old_size < size) */
-    const yyjson_alc def = YYJSON_DEFAULT_ALC;
-    dyn_ctx *ctx = (dyn_ctx *)ctx_ptr;
-    dyn_chunk *prev, *next, *new_chunk;
-    dyn_chunk *chunk = (dyn_chunk *)ptr - 1;
-    if (unlikely(!dyn_size_align(&size))) return NULL;
-    if (chunk->size >= size) return ptr;
-    
-    dyn_chunk_list_remove(&ctx->used_list, chunk);
-    new_chunk = (dyn_chunk *)def.realloc(def.ctx, chunk, chunk->size, size);
-    if (likely(new_chunk)) {
-        new_chunk->size = size;
-        chunk = new_chunk;
-    }
-    dyn_chunk_list_add(&ctx->used_list, chunk);
-    return new_chunk ? (void *)(new_chunk + 1) : NULL;
-}
-
-static void dyn_free(void *ctx_ptr, void *ptr) {
-    /* assert(ptr != NULL) */
-    dyn_ctx *ctx = (dyn_ctx *)ctx_ptr;
-    dyn_chunk *chunk = (dyn_chunk *)ptr - 1, *prev;
-    
-    dyn_chunk_list_remove(&ctx->used_list, chunk);
-    for (prev = &ctx->free_list; prev; prev = prev->next) {
-        if (!prev->next || prev->next->size >= chunk->size) {
-            chunk->next = prev->next;
-            prev->next = chunk;
-            break;
-        }
-    }
-}
-
-yyjson_alc *yyjson_alc_dyn_new(void) {
-    const yyjson_alc def = YYJSON_DEFAULT_ALC;
-    usize hdr_len = sizeof(yyjson_alc) + sizeof(dyn_ctx);
-    yyjson_alc *alc = (yyjson_alc *)def.malloc(def.ctx, hdr_len);
-    dyn_ctx *ctx = (dyn_ctx *)(void *)(alc + 1);
-    if (unlikely(!alc)) return NULL;
-    alc->malloc = dyn_malloc;
-    alc->realloc = dyn_realloc;
-    alc->free = dyn_free;
-    alc->ctx = alc + 1;
-    memset(ctx, 0, sizeof(*ctx));
-    return alc;
-}
-
-void yyjson_alc_dyn_free(yyjson_alc *alc) {
-    const yyjson_alc def = YYJSON_DEFAULT_ALC;
-    dyn_ctx *ctx = (dyn_ctx *)(void *)(alc + 1);
-    dyn_chunk *chunk, *next;
-    if (unlikely(!alc)) return;
-    for (chunk = ctx->free_list.next; chunk; chunk = next) {
-        next = chunk->next;
-        def.free(def.ctx, chunk);
-    }
-    for (chunk = ctx->used_list.next; chunk; chunk = next) {
-        next = chunk->next;
-        def.free(def.ctx, chunk);
-    }
-    def.free(def.ctx, alc);
-}
+/* Maximum number of digits for reading u32/u64/usize safety (not overflow). */
+#undef  U32_SAFE_DIG
+#define U32_SAFE_DIG    9   /* u32 max is 4294967295, 10 digits */
+#undef  U64_SAFE_DIG
+#define U64_SAFE_DIG    19  /* u64 max is 18446744073709551615, 20 digits */
+#undef  USIZE_SAFE_DIG
+#define USIZE_SAFE_DIG  (sizeof(usize) == 8 ? U64_SAFE_DIG : U32_SAFE_DIG)
 
 
 
 /*==============================================================================
- * JSON document and value
+ * IEEE-754 Double Number Constants (Private)
  *============================================================================*/
 
-static_inline void unsafe_yyjson_str_pool_release(yyjson_str_pool *pool,
-                                                  yyjson_alc *alc) {
-    yyjson_str_chunk *chunk = pool->chunks, *next;
-    while (chunk) {
-        next = chunk->next;
-        alc->free(alc->ctx, chunk);
-        chunk = next;
-    }
-}
+/* Inf raw value (positive) */
+#define F64_RAW_INF U64(0x7FF00000, 0x00000000)
 
-static_inline void unsafe_yyjson_val_pool_release(yyjson_val_pool *pool,
-                                                  yyjson_alc *alc) {
-    yyjson_val_chunk *chunk = pool->chunks, *next;
-    while (chunk) {
-        next = chunk->next;
-        alc->free(alc->ctx, chunk);
-        chunk = next;
-    }
-}
+/* NaN raw value (quiet NaN, no payload, no sign) */
+#if defined(__hppa__) || (defined(__mips__) && !defined(__mips_nan2008))
+#define F64_RAW_NAN U64(0x7FF7FFFF, 0xFFFFFFFF)
+#else
+#define F64_RAW_NAN U64(0x7FF80000, 0x00000000)
+#endif
 
-bool unsafe_yyjson_str_pool_grow(yyjson_str_pool *pool,
-                                 const yyjson_alc *alc, usize len) {
-    yyjson_str_chunk *chunk;
-    usize size, max_len;
-    
-    /* create a new chunk */
-    max_len = USIZE_MAX - sizeof(yyjson_str_chunk);
-    if (unlikely(len > max_len)) return false;
-    size = len + sizeof(yyjson_str_chunk);
-    size = yyjson_max(pool->chunk_size, size);
-    chunk = (yyjson_str_chunk *)alc->malloc(alc->ctx, size);
-    if (unlikely(!chunk)) return false;
-    
-    /* insert the new chunk as the head of the linked list */
-    chunk->next = pool->chunks;
-    chunk->chunk_size = size;
-    pool->chunks = chunk;
-    pool->cur = (char *)chunk + sizeof(yyjson_str_chunk);
-    pool->end = (char *)chunk + size;
-    
-    /* the next chunk is twice the size of the current one */
-    size = yyjson_min(pool->chunk_size * 2, pool->chunk_size_max);
-    if (size < pool->chunk_size) size = pool->chunk_size_max; /* overflow */
-    pool->chunk_size = size;
-    return true;
-}
+/* double number bits */
+#define F64_BITS 64
 
-bool unsafe_yyjson_val_pool_grow(yyjson_val_pool *pool,
-                                 const yyjson_alc *alc, usize count) {
-    yyjson_val_chunk *chunk;
-    usize size, max_count;
-    
-    /* create a new chunk */
-    max_count = USIZE_MAX / sizeof(yyjson_mut_val) - 1;
-    if (unlikely(count > max_count)) return false;
-    size = (count + 1) * sizeof(yyjson_mut_val);
-    size = yyjson_max(pool->chunk_size, size);
-    chunk = (yyjson_val_chunk *)alc->malloc(alc->ctx, size);
-    if (unlikely(!chunk)) return false;
-    
-    /* insert the new chunk as the head of the linked list */
-    chunk->next = pool->chunks;
-    chunk->chunk_size = size;
-    pool->chunks = chunk;
-    pool->cur = (yyjson_mut_val *)(void *)((u8 *)chunk) + 1;
-    pool->end = (yyjson_mut_val *)(void *)((u8 *)chunk + size);
-    
-    /* the next chunk is twice the size of the current one */
-    size = yyjson_min(pool->chunk_size * 2, pool->chunk_size_max);
-    if (size < pool->chunk_size) size = pool->chunk_size_max; /* overflow */
-    pool->chunk_size = size;
-    return true;
-}
+/* double number exponent part bits */
+#define F64_EXP_BITS 11
 
-bool yyjson_mut_doc_set_str_pool_size(yyjson_mut_doc *doc, size_t len) {
-    usize max_size = USIZE_MAX - sizeof(yyjson_str_chunk);
-    if (!doc || !len || len > max_size) return false;
-    doc->str_pool.chunk_size = len + sizeof(yyjson_str_chunk);
-    return true;
-}
+/* double number significand part bits */
+#define F64_SIG_BITS 52
 
-bool yyjson_mut_doc_set_val_pool_size(yyjson_mut_doc *doc, size_t count) {
-    usize max_count = USIZE_MAX / sizeof(yyjson_mut_val) - 1;
-    if (!doc || !count || count > max_count) return false;
-    doc->val_pool.chunk_size = (count + 1) * sizeof(yyjson_mut_val);
-    return true;
-}
+/* double number significand part bits (with 1 hidden bit) */
+#define F64_SIG_FULL_BITS 53
 
-void yyjson_mut_doc_free(yyjson_mut_doc *doc) {
-    if (doc) {
-        yyjson_alc alc = doc->alc;
-        memset(&doc->alc, 0, sizeof(alc));
-        unsafe_yyjson_str_pool_release(&doc->str_pool, &alc);
-        unsafe_yyjson_val_pool_release(&doc->val_pool, &alc);
-        alc.free(alc.ctx, doc);
-    }
-}
+/* double number significand bit mask */
+#define F64_SIG_MASK U64(0x000FFFFF, 0xFFFFFFFF)
 
-yyjson_mut_doc *yyjson_mut_doc_new(const yyjson_alc *alc) {
-    yyjson_mut_doc *doc;
-    if (!alc) alc = &YYJSON_DEFAULT_ALC;
-    doc = (yyjson_mut_doc *)alc->malloc(alc->ctx, sizeof(yyjson_mut_doc));
-    if (!doc) return NULL;
-    memset(doc, 0, sizeof(yyjson_mut_doc));
-    
-    doc->alc = *alc;
-    doc->str_pool.chunk_size = YYJSON_MUT_DOC_STR_POOL_INIT_SIZE;
-    doc->str_pool.chunk_size_max = YYJSON_MUT_DOC_STR_POOL_MAX_SIZE;
-    doc->val_pool.chunk_size = YYJSON_MUT_DOC_VAL_POOL_INIT_SIZE;
-    doc->val_pool.chunk_size_max = YYJSON_MUT_DOC_VAL_POOL_MAX_SIZE;
-    return doc;
-}
+/* double number exponent bit mask */
+#define F64_EXP_MASK U64(0x7FF00000, 0x00000000)
 
-yyjson_mut_doc *yyjson_doc_mut_copy(yyjson_doc *doc, const yyjson_alc *alc) {
-    yyjson_mut_doc *m_doc;
-    yyjson_mut_val *m_val;
-    
-    if (!doc || !doc->root) return NULL;
-    m_doc = yyjson_mut_doc_new(alc);
-    if (!m_doc) return NULL;
-    m_val = yyjson_val_mut_copy(m_doc, doc->root);
-    if (!m_val) {
-        yyjson_mut_doc_free(m_doc);
-        return NULL;
-    }
-    yyjson_mut_doc_set_root(m_doc, m_val);
-    return m_doc;
-}
+/* double number exponent bias */
+#define F64_EXP_BIAS 1023
 
-yyjson_mut_doc *yyjson_mut_doc_mut_copy(yyjson_mut_doc *doc,
-                                        const yyjson_alc *alc) {
-    yyjson_mut_doc *m_doc;
-    yyjson_mut_val *m_val;
-    
-    if (!doc) return NULL;
-    if (!doc->root) return yyjson_mut_doc_new(alc);
-    
-    m_doc = yyjson_mut_doc_new(alc);
-    if (!m_doc) return NULL;
-    m_val = yyjson_mut_val_mut_copy(m_doc, doc->root);
-    if (!m_val) {
-        yyjson_mut_doc_free(m_doc);
-        return NULL;
-    }
-    yyjson_mut_doc_set_root(m_doc, m_val);
-    return m_doc;
-}
+/* double number significant digits count in decimal */
+#define F64_DEC_DIG 17
 
-yyjson_mut_val *yyjson_val_mut_copy(yyjson_mut_doc *m_doc,
-                                    yyjson_val *i_vals) {
-    /*
-     The immutable object or array stores all sub-values in a contiguous memory,
-     We copy them to another contiguous memory as mutable values,
-     then reconnect the mutable values with the original relationship.
-     */
-    usize i_vals_len;
-    yyjson_mut_val *m_vals, *m_val;
-    yyjson_val *i_val, *i_end;
-    
-    if (!m_doc || !i_vals) return NULL;
-    i_end = unsafe_yyjson_get_next(i_vals);
-    i_vals_len = (usize)(unsafe_yyjson_get_next(i_vals) - i_vals);
-    m_vals = unsafe_yyjson_mut_val(m_doc, i_vals_len);
-    if (!m_vals) return NULL;
-    i_val = i_vals;
-    m_val = m_vals;
-    
-    for (; i_val < i_end; i_val++, m_val++) {
-        yyjson_type type = unsafe_yyjson_get_type(i_val);
-        m_val->tag = i_val->tag;
-        m_val->uni.u64 = i_val->uni.u64;
-        if (type == YYJSON_TYPE_STR || type == YYJSON_TYPE_RAW) {
-            const char *str = i_val->uni.str;
-            usize str_len = unsafe_yyjson_get_len(i_val);
-            m_val->uni.str = unsafe_yyjson_mut_strncpy(m_doc, str, str_len);
-            if (!m_val->uni.str) return NULL;
-        } else if (type == YYJSON_TYPE_ARR) {
-            usize len = unsafe_yyjson_get_len(i_val);
-            if (len > 0) {
-                yyjson_val *ii_val = i_val + 1, *ii_next;
-                yyjson_mut_val *mm_val = m_val + 1, *mm_ctn = m_val, *mm_next;
-                while (len-- > 1) {
-                    ii_next = unsafe_yyjson_get_next(ii_val);
-                    mm_next = mm_val + (ii_next - ii_val);
-                    mm_val->next = mm_next;
-                    ii_val = ii_next;
-                    mm_val = mm_next;
-                }
-                mm_val->next = mm_ctn + 1;
-                mm_ctn->uni.ptr = mm_val;
-            }
-        } else if (type == YYJSON_TYPE_OBJ) {
-            usize len = unsafe_yyjson_get_len(i_val);
-            if (len > 0) {
-                yyjson_val *ii_key = i_val + 1, *ii_nextkey;
-                yyjson_mut_val *mm_key = m_val + 1, *mm_ctn = m_val;
-                yyjson_mut_val *mm_nextkey;
-                while (len-- > 1) {
-                    ii_nextkey = unsafe_yyjson_get_next(ii_key + 1);
-                    mm_nextkey = mm_key + (ii_nextkey - ii_key);
-                    mm_key->next = mm_key + 1;
-                    mm_key->next->next = mm_nextkey;
-                    ii_key = ii_nextkey;
-                    mm_key = mm_nextkey;
-                }
-                mm_key->next = mm_key + 1;
-                mm_key->next->next = mm_ctn + 1;
-                mm_ctn->uni.ptr = mm_key;
-            }
-        }
-    }
-    
-    return m_vals;
-}
+/* max significant digits count in decimal when reading double number */
+#define F64_MAX_DEC_DIG 768
 
-static yyjson_mut_val *unsafe_yyjson_mut_val_mut_copy(yyjson_mut_doc *m_doc,
-                                                      yyjson_mut_val *m_vals) {
-    /*
-     The mutable object or array stores all sub-values in a circular linked
-     list, so we can traverse them in the same loop. The traversal starts from
-     the last item, continues with the first item in a list, and ends with the
-     second to last item, which needs to be linked to the last item to close the
-     circle.
-     */
-    yyjson_mut_val *m_val = unsafe_yyjson_mut_val(m_doc, 1);
-    if (unlikely(!m_val)) return NULL;
-    m_val->tag = m_vals->tag;
-    
-    switch (unsafe_yyjson_get_type(m_vals)) {
-        case YYJSON_TYPE_OBJ:
-        case YYJSON_TYPE_ARR:
-            if (unsafe_yyjson_get_len(m_vals) > 0) {
-                yyjson_mut_val *last = (yyjson_mut_val *)m_vals->uni.ptr;
-                yyjson_mut_val *next = last->next, *prev;
-                prev = unsafe_yyjson_mut_val_mut_copy(m_doc, last);
-                if (!prev) return NULL;
-                m_val->uni.ptr = (void *)prev;
-                while (next != last) {
-                    prev->next = unsafe_yyjson_mut_val_mut_copy(m_doc, next);
-                    if (!prev->next) return NULL;
-                    prev = prev->next;
-                    next = next->next;
-                }
-                prev->next = (yyjson_mut_val *)m_val->uni.ptr;
-            }
-            break;
-        
-        case YYJSON_TYPE_RAW:
-        case YYJSON_TYPE_STR: {
-            const char *str = m_vals->uni.str;
-            usize str_len = unsafe_yyjson_get_len(m_vals);
-            m_val->uni.str = unsafe_yyjson_mut_strncpy(m_doc, str, str_len);
-            if (!m_val->uni.str) return NULL;
-            break;
-        }
-        
-        default:
-            m_val->uni = m_vals->uni;
-            break;
-    }
-    
-    return m_val;
-}
+/* maximum decimal power of double number (1.7976931348623157e308) */
+#define F64_MAX_DEC_EXP 308
 
-yyjson_mut_val *yyjson_mut_val_mut_copy(yyjson_mut_doc *doc,
-                                        yyjson_mut_val *val) {
-    if (doc && val) return unsafe_yyjson_mut_val_mut_copy(doc, val);
-    return NULL;
-}
+/* minimum decimal power of double number (4.9406564584124654e-324) */
+#define F64_MIN_DEC_EXP (-324)
 
-/* Count the number of values and the total length of the strings. */
-static void yyjson_mut_stat(yyjson_mut_val *val,
-                            usize *val_sum, usize *str_sum) {
-    yyjson_type type = unsafe_yyjson_get_type(val);
-    *val_sum += 1;
-    if (type == YYJSON_TYPE_ARR || type == YYJSON_TYPE_OBJ) {
-        yyjson_mut_val *child = (yyjson_mut_val *)val->uni.ptr;
-        usize len = unsafe_yyjson_get_len(val), i;
-        len <<= (u8)(type == YYJSON_TYPE_OBJ);
-        *val_sum += len;
-        for (i = 0; i < len; i++) {
-            yyjson_type stype = unsafe_yyjson_get_type(child);
-            if (stype == YYJSON_TYPE_STR || stype == YYJSON_TYPE_RAW) {
-                *str_sum += unsafe_yyjson_get_len(child) + 1;
-            } else if (stype == YYJSON_TYPE_ARR || stype == YYJSON_TYPE_OBJ) {
-                yyjson_mut_stat(child, val_sum, str_sum);
-                *val_sum -= 1;
-            }
-            child = child->next;
-        }
-    } else if (type == YYJSON_TYPE_STR || type == YYJSON_TYPE_RAW) {
-        *str_sum += unsafe_yyjson_get_len(val) + 1;
-    }
-}
+/* maximum binary power of double number */
+#define F64_MAX_BIN_EXP 1024
 
-/* Copy mutable values to immutable value pool. */
-static usize yyjson_imut_copy(yyjson_val **val_ptr, char **buf_ptr,
-                              yyjson_mut_val *mval) {
-    yyjson_val *val = *val_ptr;
-    yyjson_type type = unsafe_yyjson_get_type(mval);
-    if (type == YYJSON_TYPE_ARR || type == YYJSON_TYPE_OBJ) {
-        yyjson_mut_val *child = (yyjson_mut_val *)mval->uni.ptr;
-        usize len = unsafe_yyjson_get_len(mval), i;
-        usize val_sum = 1;
-        if (type == YYJSON_TYPE_OBJ) {
-            if (len) child = child->next->next;
-            len <<= 1;
-        } else {
-            if (len) child = child->next;
-        }
-        *val_ptr = val + 1;
-        for (i = 0; i < len; i++) {
-            val_sum += yyjson_imut_copy(val_ptr, buf_ptr, child);
-            child = child->next;
-        }
-        val->tag = mval->tag;
-        val->uni.ofs = val_sum * sizeof(yyjson_val);
-        return val_sum;
-    } else if (type == YYJSON_TYPE_STR || type == YYJSON_TYPE_RAW) {
-        char *buf = *buf_ptr;
-        usize len = unsafe_yyjson_get_len(mval);
-        memcpy((void *)buf, (const void *)mval->uni.str, len);
-        buf[len] = '\0';
-        val->tag = mval->tag;
-        val->uni.str = buf;
-        *val_ptr = val + 1;
-        *buf_ptr = buf + len + 1;
-        return 1;
-    } else {
-        val->tag = mval->tag;
-        val->uni = mval->uni;
-        *val_ptr = val + 1;
-        return 1;
-    }
-}
-
-yyjson_doc *yyjson_mut_doc_imut_copy(yyjson_mut_doc *mdoc,
-                                     const yyjson_alc *alc) {
-    if (!mdoc) return NULL;
-    return yyjson_mut_val_imut_copy(mdoc->root, alc);
-}
-
-yyjson_doc *yyjson_mut_val_imut_copy(yyjson_mut_val *mval,
-                                     const yyjson_alc *alc) {
-    usize val_num = 0, str_sum = 0, hdr_size, buf_size;
-    yyjson_doc *doc = NULL;
-    yyjson_val *val_hdr = NULL;
-    
-    /* This value should be NULL here. Setting a non-null value suppresses
-       warning from the clang analyzer. */
-    char *str_hdr = (char *)(void *)&str_sum;
-    if (!mval) return NULL;
-    if (!alc) alc = &YYJSON_DEFAULT_ALC;
-    
-    /* traverse the input value to get pool size */
-    yyjson_mut_stat(mval, &val_num, &str_sum);
-    
-    /* create doc and val pool */
-    hdr_size = size_align_up(sizeof(yyjson_doc), sizeof(yyjson_val));
-    buf_size = hdr_size + val_num * sizeof(yyjson_val);
-    doc = (yyjson_doc *)alc->malloc(alc->ctx, buf_size);
-    if (!doc) return NULL;
-    memset(doc, 0, sizeof(yyjson_doc));
-    val_hdr = (yyjson_val *)(void *)((char *)(void *)doc + hdr_size);
-    doc->root = val_hdr;
-    doc->alc = *alc;
-    
-    /* create str pool */
-    if (str_sum > 0) {
-        str_hdr = (char *)alc->malloc(alc->ctx, str_sum);
-        doc->str_pool = str_hdr;
-        if (!str_hdr) {
-            alc->free(alc->ctx, (void *)doc);
-            return NULL;
-        }
-    }
-    
-    /* copy vals and strs */
-    doc->val_read = yyjson_imut_copy(&val_hdr, &str_hdr, mval);
-    doc->dat_read = str_sum + 1;
-    return doc;
-}
-
-static_inline bool unsafe_yyjson_num_equals(void *lhs, void *rhs) {
-    yyjson_val_uni *luni = &((yyjson_val *)lhs)->uni;
-    yyjson_val_uni *runi = &((yyjson_val *)rhs)->uni;
-    yyjson_subtype lt = unsafe_yyjson_get_subtype(lhs);
-    yyjson_subtype rt = unsafe_yyjson_get_subtype(rhs);
-    if (lt == rt) return luni->u64 == runi->u64;
-    if (lt == YYJSON_SUBTYPE_SINT && rt == YYJSON_SUBTYPE_UINT) {
-        return luni->i64 >= 0 && luni->u64 == runi->u64;
-    }
-    if (lt == YYJSON_SUBTYPE_UINT && rt == YYJSON_SUBTYPE_SINT) {
-        return runi->i64 >= 0 && luni->u64 == runi->u64;
-    }
-    return false;
-}
-
-static_inline bool unsafe_yyjson_str_equals(void *lhs, void *rhs) {
-    usize len = unsafe_yyjson_get_len(lhs);
-    if (len != unsafe_yyjson_get_len(rhs)) return false;
-    return !memcmp(unsafe_yyjson_get_str(lhs),
-                   unsafe_yyjson_get_str(rhs), len);
-}
-
-bool unsafe_yyjson_equals(yyjson_val *lhs, yyjson_val *rhs) {
-    yyjson_type type = unsafe_yyjson_get_type(lhs);
-    if (type != unsafe_yyjson_get_type(rhs)) return false;
-    
-    switch (type) {
-        case YYJSON_TYPE_OBJ: {
-            usize len = unsafe_yyjson_get_len(lhs);
-            if (len != unsafe_yyjson_get_len(rhs)) return false;
-            if (len > 0) {
-                yyjson_obj_iter iter;
-                yyjson_obj_iter_init(rhs, &iter);
-                lhs = unsafe_yyjson_get_first(lhs);
-                while (len-- > 0) {
-                    rhs = yyjson_obj_iter_getn(&iter, lhs->uni.str,
-                                               unsafe_yyjson_get_len(lhs));
-                    if (!rhs) return false;
-                    if (!unsafe_yyjson_equals(lhs + 1, rhs)) return false;
-                    lhs = unsafe_yyjson_get_next(lhs + 1);
-                }
-            }
-            /* yyjson allows duplicate keys, so the check may be inaccurate */
-            return true;
-        }
-        
-        case YYJSON_TYPE_ARR: {
-            usize len = unsafe_yyjson_get_len(lhs);
-            if (len != unsafe_yyjson_get_len(rhs)) return false;
-            if (len > 0) {
-                lhs = unsafe_yyjson_get_first(lhs);
-                rhs = unsafe_yyjson_get_first(rhs);
-                while (len-- > 0) {
-                    if (!unsafe_yyjson_equals(lhs, rhs)) return false;
-                    lhs = unsafe_yyjson_get_next(lhs);
-                    rhs = unsafe_yyjson_get_next(rhs);
-                }
-            }
-            return true;
-        }
-        
-        case YYJSON_TYPE_NUM:
-            return unsafe_yyjson_num_equals(lhs, rhs);
-        
-        case YYJSON_TYPE_RAW:
-        case YYJSON_TYPE_STR:
-            return unsafe_yyjson_str_equals(lhs, rhs);
-        
-        case YYJSON_TYPE_NULL:
-        case YYJSON_TYPE_BOOL:
-            return lhs->tag == rhs->tag;
-        
-        default:
-            return false;
-    }
-}
-
-bool unsafe_yyjson_mut_equals(yyjson_mut_val *lhs, yyjson_mut_val *rhs) {
-    yyjson_type type = unsafe_yyjson_get_type(lhs);
-    if (type != unsafe_yyjson_get_type(rhs)) return false;
-    
-    switch (type) {
-        case YYJSON_TYPE_OBJ: {
-            usize len = unsafe_yyjson_get_len(lhs);
-            if (len != unsafe_yyjson_get_len(rhs)) return false;
-            if (len > 0) {
-                yyjson_mut_obj_iter iter;
-                yyjson_mut_obj_iter_init(rhs, &iter);
-                lhs = (yyjson_mut_val *)lhs->uni.ptr;
-                while (len-- > 0) {
-                    rhs = yyjson_mut_obj_iter_getn(&iter, lhs->uni.str,
-                                                   unsafe_yyjson_get_len(lhs));
-                    if (!rhs) return false;
-                    if (!unsafe_yyjson_mut_equals(lhs->next, rhs)) return false;
-                    lhs = lhs->next->next;
-                }
-            }
-            /* yyjson allows duplicate keys, so the check may be inaccurate */
-            return true;
-        }
-        
-        case YYJSON_TYPE_ARR: {
-            usize len = unsafe_yyjson_get_len(lhs);
-            if (len != unsafe_yyjson_get_len(rhs)) return false;
-            if (len > 0) {
-                lhs = (yyjson_mut_val *)lhs->uni.ptr;
-                rhs = (yyjson_mut_val *)rhs->uni.ptr;
-                while (len-- > 0) {
-                    if (!unsafe_yyjson_mut_equals(lhs, rhs)) return false;
-                    lhs = lhs->next;
-                    rhs = rhs->next;
-                }
-            }
-            return true;
-        }
-        
-        case YYJSON_TYPE_NUM:
-            return unsafe_yyjson_num_equals(lhs, rhs);
-        
-        case YYJSON_TYPE_RAW:
-        case YYJSON_TYPE_STR:
-            return unsafe_yyjson_str_equals(lhs, rhs);
-        
-        case YYJSON_TYPE_NULL:
-        case YYJSON_TYPE_BOOL:
-            return lhs->tag == rhs->tag;
-        
-        default:
-            return false;
-    }
-}
-
-
-
-#if !YYJSON_DISABLE_UTILS
-
-/*==============================================================================
- * JSON Pointer API (RFC 6901)
- *============================================================================*/
-
-/**
- Get a token from JSON pointer string.
- @param ptr [in,out]
-                in:  string that points to current token prefix `/`
-                out: string that points to next token prefix `/`, or string end
- @param end [in] end of the entire JSON Pointer string
- @param len [out] unescaped token length
- @param esc [out] number of escaped characters in this token
- @return head of the token, or NULL if syntax error
- */
-static_inline const char *ptr_next_token(const char **ptr, const char *end,
-                                         usize *len, usize *esc) {
-    const char *hdr = *ptr + 1;
-    const char *cur = hdr;
-    /* skip unescaped characters */
-    while (cur < end && *cur != '/' && *cur != '~') cur++;
-    if (likely(cur == end || *cur != '~')) {
-        /* no escaped characters, return */
-        *ptr = cur;
-        *len = (usize)(cur - hdr);
-        *esc = 0;
-        return hdr;
-    } else {
-        /* handle escaped characters */
-        usize esc_num = 0;
-        while (cur < end && *cur != '/') {
-            if (*cur++ == '~') {
-                if (cur == end || (*cur != '0' && *cur != '1')) {
-                    *ptr = cur - 1;
-                    return NULL;
-                }
-                esc_num++;
-            }
-        }
-        *ptr = cur;
-        *len = (usize)(cur - hdr) - esc_num;
-        *esc = esc_num;
-        return hdr;
-    }
-}
-
-/**
- Convert token string to index.
- @param cur [in]  token head
- @param len [in]  token length
- @param idx [out] the index number, or USIZE_MAX if token is '-'
- @return true if token is a valid array index
- */
-static_inline bool ptr_token_to_idx(const char *cur, usize len, usize *idx) {
-    const char *end = cur + len;
-    usize num = 0, add;
-    if (unlikely(len == 0 || len > USIZE_SAFE_DIG)) return false;
-    if (*cur == '0') {
-        if (unlikely(len > 1)) return false;
-        *idx = 0;
-        return true;
-    }
-    if (*cur == '-') {
-        if (unlikely(len > 1)) return false;
-        *idx = USIZE_MAX;
-        return true;
-    }
-    for (; cur < end && (add = (usize)((u8)*cur - (u8)'0')) <= 9; cur++) {
-        num = num * 10 + add;
-    }
-    if (unlikely(num == 0 || cur < end)) return false;
-    *idx = num;
-    return true;
-}
-
-/**
- Compare JSON key with token.
- @param key a string key (yyjson_val or yyjson_mut_val)
- @param token a JSON pointer token
- @param len unescaped token length
- @param esc number of escaped characters in this token
- @return true if `str` is equals to `token`
- */
-static_inline bool ptr_token_eq(void *key,
-                                const char *token, usize len, usize esc) {
-    yyjson_val *val = (yyjson_val *)key;
-    if (unsafe_yyjson_get_len(val) != len) return false;
-    if (likely(!esc)) {
-        return memcmp(val->uni.str, token, len) == 0;
-    } else {
-        const char *str = val->uni.str;
-        for (; len-- > 0; token++, str++) {
-            if (*token == '~') {
-                if (*str != (*++token == '0' ? '~' : '/')) return false;
-            } else {
-                if (*str != *token) return false;
-            }
-        }
-        return true;
-    }
-}
-
-/**
- Get a value from array by token.
- @param arr   an array, should not be NULL or non-array type
- @param token a JSON pointer token
- @param len   unescaped token length
- @param esc   number of escaped characters in this token
- @return value at index, or NULL if token is not index or index is out of range
- */
-static_inline yyjson_val *ptr_arr_get(yyjson_val *arr, const char *token,
-                                      usize len, usize esc) {
-    yyjson_val *val = unsafe_yyjson_get_first(arr);
-    usize num = unsafe_yyjson_get_len(arr), idx = 0;
-    if (unlikely(num == 0)) return NULL;
-    if (unlikely(!ptr_token_to_idx(token, len, &idx))) return NULL;
-    if (unlikely(idx >= num)) return NULL;
-    if (unsafe_yyjson_arr_is_flat(arr)) {
-        return val + idx;
-    } else {
-        while (idx-- > 0) val = unsafe_yyjson_get_next(val);
-        return val;
-    }
-}
-
-/**
- Get a value from object by token.
- @param obj   [in] an object, should not be NULL or non-object type
- @param token [in] a JSON pointer token
- @param len   [in] unescaped token length
- @param esc   [in] number of escaped characters in this token
- @return value associated with the token, or NULL if no value
- */
-static_inline yyjson_val *ptr_obj_get(yyjson_val *obj, const char *token,
-                                      usize len, usize esc) {
-    yyjson_val *key = unsafe_yyjson_get_first(obj);
-    usize num = unsafe_yyjson_get_len(obj);
-    if (unlikely(num == 0)) return NULL;
-    for (; num > 0; num--, key = unsafe_yyjson_get_next(key + 1)) {
-        if (ptr_token_eq(key, token, len, esc)) return key + 1;
-    }
-    return NULL;
-}
-
-/**
- Get a value from array by token.
- @param arr   [in] an array, should not be NULL or non-array type
- @param token [in] a JSON pointer token
- @param len   [in] unescaped token length
- @param esc   [in] number of escaped characters in this token
- @param pre   [out] previous (sibling) value of the returned value
- @param last  [out] whether index is last
- @return value at index, or NULL if token is not index or index is out of range
- */
-static_inline yyjson_mut_val *ptr_mut_arr_get(yyjson_mut_val *arr,
-                                              const char *token,
-                                              usize len, usize esc,
-                                              yyjson_mut_val **pre,
-                                              bool *last) {
-    yyjson_mut_val *val = (yyjson_mut_val *)arr->uni.ptr; /* last (tail) */
-    usize num = unsafe_yyjson_get_len(arr), idx;
-    if (last) *last = false;
-    if (pre) *pre = NULL;
-    if (unlikely(num == 0)) {
-        if (last && len == 1 && (*token == '0' || *token == '-')) *last = true;
-        return NULL;
-    }
-    if (unlikely(!ptr_token_to_idx(token, len, &idx))) return NULL;
-    if (last) *last = (idx == num || idx == USIZE_MAX);
-    if (unlikely(idx >= num)) return NULL;
-    while (idx-- > 0) val = val->next;
-    *pre = val;
-    return val->next;
-}
-
-/**
- Get a value from object by token.
- @param obj   [in] an object, should not be NULL or non-object type
- @param token [in] a JSON pointer token
- @param len   [in] unescaped token length
- @param esc   [in] number of escaped characters in this token
- @param pre   [out] previous (sibling) key of the returned value's key
- @return value associated with the token, or NULL if no value
- */
-static_inline yyjson_mut_val *ptr_mut_obj_get(yyjson_mut_val *obj,
-                                              const char *token,
-                                              usize len, usize esc,
-                                              yyjson_mut_val **pre) {
-    yyjson_mut_val *pre_key = (yyjson_mut_val *)obj->uni.ptr, *key;
-    usize num = unsafe_yyjson_get_len(obj);
-    if (pre) *pre = NULL;
-    if (unlikely(num == 0)) return NULL;
-    for (; num > 0; num--, pre_key = key) {
-        key = pre_key->next->next;
-        if (ptr_token_eq(key, token, len, esc)) {
-            *pre = pre_key;
-            return key->next;
-        }
-    }
-    return NULL;
-}
-
-/**
- Create a string value with JSON pointer token.
- @param token [in] a JSON pointer token
- @param len   [in] unescaped token length
- @param esc   [in] number of escaped characters in this token
- @param doc   [in] used for memory allocation when creating value
- @return new string value, or NULL if memory allocation failed
- */
-static_inline yyjson_mut_val *ptr_new_key(const char *token,
-                                          usize len, usize esc,
-                                          yyjson_mut_doc *doc) {
-    const char *src = token;
-    if (likely(!esc)) {
-        return yyjson_mut_strncpy(doc, src, len);
-    } else {
-        const char *end = src + len + esc;
-        char *dst = unsafe_yyjson_mut_str_alc(doc, len + esc);
-        char *str = dst;
-        if (unlikely(!dst)) return NULL;
-        for (; src < end; src++, dst++) {
-            if (*src != '~') *dst = *src;
-            else *dst = (*++src == '0' ? '~' : '/');
-        }
-        *dst = '\0';
-        return yyjson_mut_strn(doc, str, len);
-    }
-}
-
-/* macros for yyjson_ptr */
-#define return_err(_ret, _code, _pos, _msg) do { \
-    if (err) { \
-        err->code = YYJSON_PTR_ERR_##_code; \
-        err->msg = _msg; \
-        err->pos = (usize)(_pos); \
-    } \
-    return _ret; \
-} while (false)
-
-#define return_err_resolve(_ret, _pos) \
-    return_err(_ret, RESOLVE, _pos, "JSON pointer cannot be resolved")
-#define return_err_syntax(_ret, _pos) \
-    return_err(_ret, SYNTAX, _pos, "invalid escaped character")
-#define return_err_alloc(_ret) \
-    return_err(_ret, MEMORY_ALLOCATION, 0, "failed to create value")
-
-yyjson_val *unsafe_yyjson_ptr_getx(yyjson_val *val,
-                                   const char *ptr, size_t ptr_len,
-                                   yyjson_ptr_err *err) {
-    
-    const char *hdr = ptr, *end = ptr + ptr_len, *token;
-    usize len, esc;
-    yyjson_type type;
-    
-    while (true) {
-        token = ptr_next_token(&ptr, end, &len, &esc);
-        if (unlikely(!token)) return_err_syntax(NULL, ptr - hdr);
-        type = unsafe_yyjson_get_type(val);
-        if (type == YYJSON_TYPE_OBJ) {
-            val = ptr_obj_get(val, token, len, esc);
-        } else if (type == YYJSON_TYPE_ARR) {
-            val = ptr_arr_get(val, token, len, esc);
-        } else {
-            val = NULL;
-        }
-        if (!val) return_err_resolve(NULL, token - hdr);
-        if (ptr == end) return val;
-    }
-}
-
-yyjson_mut_val *unsafe_yyjson_mut_ptr_getx(yyjson_mut_val *val,
-                                           const char *ptr,
-                                           size_t ptr_len,
-                                           yyjson_ptr_ctx *ctx,
-                                           yyjson_ptr_err *err) {
-    
-    const char *hdr = ptr, *end = ptr + ptr_len, *token;
-    usize len, esc;
-    yyjson_mut_val *ctn, *pre = NULL;
-    yyjson_type type;
-    bool idx_is_last = false;
-    
-    while (true) {
-        token = ptr_next_token(&ptr, end, &len, &esc);
-        if (unlikely(!token)) return_err_syntax(NULL, ptr - hdr);
-        ctn = val;
-        type = unsafe_yyjson_get_type(val);
-        if (type == YYJSON_TYPE_OBJ) {
-            val = ptr_mut_obj_get(val, token, len, esc, &pre);
-        } else if (type == YYJSON_TYPE_ARR) {
-            val = ptr_mut_arr_get(val, token, len, esc, &pre, &idx_is_last);
-        } else {
-            val = NULL;
-        }
-        if (ctx && (ptr == end)) {
-            if (type == YYJSON_TYPE_OBJ ||
-                (type == YYJSON_TYPE_ARR && (val || idx_is_last))) {
-                ctx->ctn = ctn;
-                ctx->pre = pre;
-            }
-        }
-        if (!val) return_err_resolve(NULL, token - hdr);
-        if (ptr == end) return val;
-    }
-}
-
-bool unsafe_yyjson_mut_ptr_putx(yyjson_mut_val *val,
-                                const char *ptr, size_t ptr_len,
-                                yyjson_mut_val *new_val,
-                                yyjson_mut_doc *doc,
-                                bool create_parent, bool insert_new,
-                                yyjson_ptr_ctx *ctx,
-                                yyjson_ptr_err *err) {
-    
-    const char *hdr = ptr, *end = ptr + ptr_len, *token;
-    usize token_len, esc, ctn_len;
-    yyjson_mut_val *ctn, *key, *pre = NULL;
-    yyjson_mut_val *sep_ctn = NULL, *sep_key = NULL, *sep_val = NULL;
-    yyjson_type ctn_type;
-    bool idx_is_last = false;
-    
-    /* skip exist parent nodes */
-    while (true) {
-        token = ptr_next_token(&ptr, end, &token_len, &esc);
-        if (unlikely(!token)) return_err_syntax(false, ptr - hdr);
-        ctn = val;
-        ctn_type = unsafe_yyjson_get_type(ctn);
-        if (ctn_type == YYJSON_TYPE_OBJ) {
-            val = ptr_mut_obj_get(ctn, token, token_len, esc, &pre);
-        } else if (ctn_type == YYJSON_TYPE_ARR) {
-            val = ptr_mut_arr_get(ctn, token, token_len, esc, &pre,
-                                  &idx_is_last);
-        } else return_err_resolve(false, token - hdr);
-        if (!val) break;
-        if (ptr == end) break; /* is last token */
-    }
-    
-    /* create parent nodes if not exist */
-    if (unlikely(ptr != end)) { /* not last token */
-        if (!create_parent) return_err_resolve(false, token - hdr);
-        
-        /* add value at last index if container is array */
-        if (ctn_type == YYJSON_TYPE_ARR) {
-            if (!idx_is_last || !insert_new) {
-                return_err_resolve(false, token - hdr);
-            }
-            val = yyjson_mut_obj(doc);
-            if (!val) return_err_alloc(false);
-            
-            /* delay attaching until all operations are completed */
-            sep_ctn = ctn;
-            sep_key = NULL;
-            sep_val = val;
-            
-            /* move to next token */
-            ctn = val;
-            val = NULL;
-            ctn_type = YYJSON_TYPE_OBJ;
-            token = ptr_next_token(&ptr, end, &token_len, &esc);
-            if (unlikely(!token)) return_err_resolve(false, token - hdr);
-        }
-        
-        /* container is object, create parent nodes */
-        while (ptr != end) { /* not last token */
-            key = ptr_new_key(token, token_len, esc, doc);
-            if (!key) return_err_alloc(false);
-            val = yyjson_mut_obj(doc);
-            if (!val) return_err_alloc(false);
-            
-            /* delay attaching until all operations are completed */
-            if (!sep_ctn) {
-                sep_ctn = ctn;
-                sep_key = key;
-                sep_val = val;
-            } else {
-                yyjson_mut_obj_add(ctn, key, val);
-            }
-            
-            /* move to next token */
-            ctn = val;
-            val = NULL;
-            token = ptr_next_token(&ptr, end, &token_len, &esc);
-            if (unlikely(!token)) return_err_syntax(false, ptr - hdr);
-        }
-    }
-    
-    /* JSON pointer is resolved, insert or replace target value */
-    ctn_len = unsafe_yyjson_get_len(ctn);
-    if (ctn_type == YYJSON_TYPE_OBJ) {
-        if (ctx) ctx->ctn = ctn;
-        if (!val || insert_new) {
-            /* insert new key-value pair */
-            key = ptr_new_key(token, token_len, esc, doc);
-            if (unlikely(!key)) return_err_alloc(false);
-            if (ctx) ctx->pre = ctn_len ? (yyjson_mut_val *)ctn->uni.ptr : key;
-            unsafe_yyjson_mut_obj_add(ctn, key, new_val, ctn_len);
-        } else {
-            /* replace exist value */
-            key = pre->next->next;
-            if (ctx) ctx->pre = pre;
-            if (ctx) ctx->old = val;
-            yyjson_mut_obj_put(ctn, key, new_val);
-        }
-    } else {
-        /* array */
-        if (ctx && (val || idx_is_last)) ctx->ctn = ctn;
-        if (insert_new) {
-            /* append new value */
-            if (val) {
-                pre->next = new_val;
-                new_val->next = val;
-                if (ctx) ctx->pre = pre;
-                unsafe_yyjson_set_len(ctn, ctn_len + 1);
-            } else if (idx_is_last) {
-                if (ctx) ctx->pre = ctn_len ?
-                    (yyjson_mut_val *)ctn->uni.ptr : new_val;
-                yyjson_mut_arr_append(ctn, new_val);
-            } else {
-                return_err_resolve(false, token - hdr);
-            }
-        } else {
-            /* replace exist value */
-            if (!val) return_err_resolve(false, token - hdr);
-            if (ctn_len > 1) {
-                new_val->next = val->next;
-                pre->next = new_val;
-                if (ctn->uni.ptr == val) ctn->uni.ptr = new_val;
-            } else {
-                new_val->next = new_val;
-                ctn->uni.ptr = new_val;
-                pre = new_val;
-            }
-            if (ctx) ctx->pre = pre;
-            if (ctx) ctx->old = val;
-        }
-    }
-    
-    /* all operations are completed, attach the new components to the target */
-    if (unlikely(sep_ctn)) {
-        if (sep_key) yyjson_mut_obj_add(sep_ctn, sep_key, sep_val);
-        else yyjson_mut_arr_append(sep_ctn, sep_val);
-    }
-    return true;
-}
-
-yyjson_mut_val *unsafe_yyjson_mut_ptr_replacex(
-    yyjson_mut_val *val, const char *ptr, size_t len, yyjson_mut_val *new_val,
-    yyjson_ptr_ctx *ctx, yyjson_ptr_err *err) {
-    
-    yyjson_mut_val *cur_val;
-    yyjson_ptr_ctx cur_ctx;
-    memset(&cur_ctx, 0, sizeof(cur_ctx));
-    if (!ctx) ctx = &cur_ctx;
-    cur_val = unsafe_yyjson_mut_ptr_getx(val, ptr, len, ctx, err);
-    if (!cur_val) return NULL;
-    
-    if (yyjson_mut_is_obj(ctx->ctn)) {
-        yyjson_mut_val *key = ctx->pre->next->next;
-        yyjson_mut_obj_put(ctx->ctn, key, new_val);
-    } else {
-        yyjson_ptr_ctx_replace(ctx, new_val);
-    }
-    ctx->old = cur_val;
-    return cur_val;
-}
-
-yyjson_mut_val *unsafe_yyjson_mut_ptr_removex(yyjson_mut_val *val,
-                                              const char *ptr,
-                                              size_t len,
-                                              yyjson_ptr_ctx *ctx,
-                                              yyjson_ptr_err *err) {
-    yyjson_mut_val *cur_val;
-    yyjson_ptr_ctx cur_ctx;
-    memset(&cur_ctx, 0, sizeof(cur_ctx));
-    if (!ctx) ctx = &cur_ctx;
-    cur_val = unsafe_yyjson_mut_ptr_getx(val, ptr, len, ctx, err);
-    if (cur_val) {
-        if (yyjson_mut_is_obj(ctx->ctn)) {
-            yyjson_mut_val *key = ctx->pre->next->next;
-            yyjson_mut_obj_put(ctx->ctn, key, NULL);
-        } else {
-            yyjson_ptr_ctx_remove(ctx);
-        }
-        ctx->pre = NULL;
-        ctx->old = cur_val;
-    }
-    return cur_val;
-}
-
-/* macros for yyjson_ptr */
-#undef return_err
-#undef return_err_resolve
-#undef return_err_syntax
-#undef return_err_alloc
+/* minimum binary power of double number */
+#define F64_MIN_BIN_EXP (-1021)
 
 
 
 /*==============================================================================
- * JSON Patch API (RFC 6902)
+ * Power of 10 Lookup Table (Private)
+ * These data are used by the IEEE-754 floating-point number reader and writer.
  *============================================================================*/
 
-/* JSON Patch operation */
-typedef enum patch_op {
-    PATCH_OP_ADD,       /* path, value */
-    PATCH_OP_REMOVE,    /* path */
-    PATCH_OP_REPLACE,   /* path, value */
-    PATCH_OP_MOVE,      /* from, path */
-    PATCH_OP_COPY,      /* from, path */
-    PATCH_OP_TEST,      /* path, value */
-    PATCH_OP_NONE       /* invalid */
-} patch_op;
+/** Maximum exponent of exact pow10 */
+#define U64_POW10_MAX_EXP 19
 
-static patch_op patch_op_get(yyjson_val *op) {
-    const char *str = op->uni.str;
-    switch (unsafe_yyjson_get_len(op)) {
-        case 3:
-            if (!memcmp(str, "add", 3)) return PATCH_OP_ADD;
-            return PATCH_OP_NONE;
-        case 4:
-            if (!memcmp(str, "move", 4)) return PATCH_OP_MOVE;
-            if (!memcmp(str, "copy", 4)) return PATCH_OP_COPY;
-            if (!memcmp(str, "test", 4)) return PATCH_OP_TEST;
-            return PATCH_OP_NONE;
-        case 6:
-            if (!memcmp(str, "remove", 6)) return PATCH_OP_REMOVE;
-            return PATCH_OP_NONE;
-        case 7:
-            if (!memcmp(str, "replace", 7)) return PATCH_OP_REPLACE;
-            return PATCH_OP_NONE;
-        default:
-            return PATCH_OP_NONE;
-    }
-}
-
-/* macros for yyjson_patch */
-#define return_err(_code, _msg) do { \
-    if (err->ptr.code == YYJSON_PTR_ERR_MEMORY_ALLOCATION) { \
-        err->code = YYJSON_PATCH_ERROR_MEMORY_ALLOCATION; \
-        err->msg = _msg; \
-        memset(&err->ptr, 0, sizeof(yyjson_ptr_err)); \
-    } else { \
-        err->code = YYJSON_PATCH_ERROR_##_code; \
-        err->msg = _msg; \
-        err->idx = iter.idx ? iter.idx - 1 : 0; \
-    } \
-    return NULL; \
-} while (false)
-
-#define return_err_copy() \
-    return_err(MEMORY_ALLOCATION, "failed to copy value")
-#define return_err_key(_key) \
-    return_err(MISSING_KEY, "missing key " _key)
-#define return_err_val(_key) \
-    return_err(INVALID_MEMBER, "invalid member " _key)
-
-#define ptr_get(_ptr) yyjson_mut_ptr_getx( \
-    root, _ptr->uni.str, _ptr##_len, NULL, &err->ptr)
-#define ptr_add(_ptr, _val) yyjson_mut_ptr_addx( \
-    root, _ptr->uni.str, _ptr##_len, _val, doc, false, NULL, &err->ptr)
-#define ptr_remove(_ptr) yyjson_mut_ptr_removex( \
-    root, _ptr->uni.str, _ptr##_len, NULL, &err->ptr)
-#define ptr_replace(_ptr, _val)yyjson_mut_ptr_replacex( \
-    root, _ptr->uni.str, _ptr##_len, _val, NULL, &err->ptr)
-    
-yyjson_mut_val *yyjson_patch(yyjson_mut_doc *doc,
-                             yyjson_val *orig,
-                             yyjson_val *patch,
-                             yyjson_patch_err *err) {
-
-    yyjson_mut_val *root;
-    yyjson_val *obj;
-    yyjson_arr_iter iter;
-    yyjson_patch_err err_tmp;
-    if (!err) err = &err_tmp;
-    memset(err, 0, sizeof(*err));
-    memset(&iter, 0, sizeof(iter));
-    
-    if (unlikely(!doc || !orig || !patch)) {
-        return_err(INVALID_PARAMETER, "input parameter is NULL");
-    }
-    if (unlikely(!yyjson_is_arr(patch))) {
-        return_err(INVALID_PARAMETER, "input patch is not array");
-    }
-    root = yyjson_val_mut_copy(doc, orig);
-    if (unlikely(!root)) return_err_copy();
-    
-    /* iterate through the patch array */
-    yyjson_arr_iter_init(patch, &iter);
-    while ((obj = yyjson_arr_iter_next(&iter))) {
-        patch_op op_enum;
-        yyjson_val *op, *path, *from = NULL, *value;
-        yyjson_mut_val *val = NULL, *test;
-        usize path_len, from_len = 0;
-        if (unlikely(!unsafe_yyjson_is_obj(obj))) {
-            return_err(INVALID_OPERATION, "JSON patch operation is not object");
-        }
-        
-        /* get required member: op */
-        op = yyjson_obj_get(obj, "op");
-        if (unlikely(!op)) return_err_key("`op`");
-        if (unlikely(!yyjson_is_str(op))) return_err_val("`op`");
-        op_enum = patch_op_get(op);
-        
-        /* get required member: path */
-        path = yyjson_obj_get(obj, "path");
-        if (unlikely(!path)) return_err_key("`path`");
-        if (unlikely(!yyjson_is_str(path))) return_err_val("`path`");
-        path_len = unsafe_yyjson_get_len(path);
-        
-        /* get required member: value, from */
-        switch ((int)op_enum) {
-            case PATCH_OP_ADD: case PATCH_OP_REPLACE: case PATCH_OP_TEST:
-                value = yyjson_obj_get(obj, "value");
-                if (unlikely(!value)) return_err_key("`value`");
-                val = yyjson_val_mut_copy(doc, value);
-                if (unlikely(!val)) return_err_copy();
-                break;
-            case PATCH_OP_MOVE: case PATCH_OP_COPY:
-                from = yyjson_obj_get(obj, "from");
-                if (unlikely(!from)) return_err_key("`from`");
-                if (unlikely(!yyjson_is_str(from))) return_err_val("`from`");
-                from_len = unsafe_yyjson_get_len(from);
-                break;
-            default:
-                break;
-        }
-        
-        /* perform an operation */
-        switch ((int)op_enum) {
-            case PATCH_OP_ADD: /* add(path, val) */
-                if (unlikely(path_len == 0)) { root = val; break; }
-                if (unlikely(!ptr_add(path, val))) {
-                    return_err(POINTER, "failed to add `path`");
-                }
-                break;
-            case PATCH_OP_REMOVE: /* remove(path) */
-                if (unlikely(!ptr_remove(path))) {
-                    return_err(POINTER, "failed to remove `path`");
-                }
-                break;
-            case PATCH_OP_REPLACE: /* replace(path, val) */
-                if (unlikely(path_len == 0)) { root = val; break; }
-                if (unlikely(!ptr_replace(path, val))) {
-                    return_err(POINTER, "failed to replace `path`");
-                }
-                break;
-            case PATCH_OP_MOVE: /* val = remove(from), add(path, val) */
-                if (unlikely(from_len == 0 && path_len == 0)) break;
-                val = ptr_remove(from);
-                if (unlikely(!val)) {
-                    return_err(POINTER, "failed to remove `from`");
-                }
-                if (unlikely(path_len == 0)) { root = val; break; }
-                if (unlikely(!ptr_add(path, val))) {
-                    return_err(POINTER, "failed to add `path`");
-                }
-                break;
-            case PATCH_OP_COPY: /* val = get(from).copy, add(path, val) */
-                val = ptr_get(from);
-                if (unlikely(!val)) {
-                    return_err(POINTER, "failed to get `from`");
-                }
-                if (unlikely(path_len == 0)) { root = val; break; }
-                val = yyjson_mut_val_mut_copy(doc, val);
-                if (unlikely(!val)) return_err_copy();
-                if (unlikely(!ptr_add(path, val))) {
-                    return_err(POINTER, "failed to add `path`");
-                }
-                break;
-            case PATCH_OP_TEST: /* test = get(path), test.eq(val) */
-                test = ptr_get(path);
-                if (unlikely(!test)) {
-                    return_err(POINTER, "failed to get `path`");
-                }
-                if (unlikely(!yyjson_mut_equals(val, test))) {
-                    return_err(EQUAL, "failed to test equal");
-                }
-                break;
-            default:
-                return_err(INVALID_MEMBER, "unsupported `op`");
-        }
-    }
-    return root;
-}
-
-yyjson_mut_val *yyjson_mut_patch(yyjson_mut_doc *doc,
-                                 yyjson_mut_val *orig,
-                                 yyjson_mut_val *patch,
-                                 yyjson_patch_err *err) {
-    yyjson_mut_val *root, *obj;
-    yyjson_mut_arr_iter iter;
-    yyjson_patch_err err_tmp;
-    if (!err) err = &err_tmp;
-    memset(err, 0, sizeof(*err));
-    memset(&iter, 0, sizeof(iter));
-    
-    if (unlikely(!doc || !orig || !patch)) {
-        return_err(INVALID_PARAMETER, "input parameter is NULL");
-    }
-    if (unlikely(!yyjson_mut_is_arr(patch))) {
-        return_err(INVALID_PARAMETER, "input patch is not array");
-    }
-    root = yyjson_mut_val_mut_copy(doc, orig);
-    if (unlikely(!root)) return_err_copy();
-    
-    /* iterate through the patch array */
-    yyjson_mut_arr_iter_init(patch, &iter);
-    while ((obj = yyjson_mut_arr_iter_next(&iter))) {
-        patch_op op_enum;
-        yyjson_mut_val *op, *path, *from = NULL, *value;
-        yyjson_mut_val *val = NULL, *test;
-        usize path_len, from_len = 0;
-        if (!unsafe_yyjson_is_obj(obj)) {
-            return_err(INVALID_OPERATION, "JSON patch operation is not object");
-        }
-        
-        /* get required member: op */
-        op = yyjson_mut_obj_get(obj, "op");
-        if (unlikely(!op)) return_err_key("`op`");
-        if (unlikely(!yyjson_mut_is_str(op))) return_err_val("`op`");
-        op_enum = patch_op_get((yyjson_val *)(void *)op);
-        
-        /* get required member: path */
-        path = yyjson_mut_obj_get(obj, "path");
-        if (unlikely(!path)) return_err_key("`path`");
-        if (unlikely(!yyjson_mut_is_str(path))) return_err_val("`path`");
-        path_len = unsafe_yyjson_get_len(path);
-        
-        /* get required member: value, from */
-        switch ((int)op_enum) {
-            case PATCH_OP_ADD: case PATCH_OP_REPLACE: case PATCH_OP_TEST:
-                value = yyjson_mut_obj_get(obj, "value");
-                if (unlikely(!value)) return_err_key("`value`");
-                val = yyjson_mut_val_mut_copy(doc, value);
-                if (unlikely(!val)) return_err_copy();
-                break;
-            case PATCH_OP_MOVE: case PATCH_OP_COPY:
-                from = yyjson_mut_obj_get(obj, "from");
-                if (unlikely(!from)) return_err_key("`from`");
-                if (unlikely(!yyjson_mut_is_str(from))) {
-                    return_err_val("`from`");
-                }
-                from_len = unsafe_yyjson_get_len(from);
-                break;
-            default:
-                break;
-        }
-        
-        /* perform an operation */
-        switch ((int)op_enum) {
-            case PATCH_OP_ADD: /* add(path, val) */
-                if (unlikely(path_len == 0)) { root = val; break; }
-                if (unlikely(!ptr_add(path, val))) {
-                    return_err(POINTER, "failed to add `path`");
-                }
-                break;
-            case PATCH_OP_REMOVE: /* remove(path) */
-                if (unlikely(!ptr_remove(path))) {
-                    return_err(POINTER, "failed to remove `path`");
-                }
-                break;
-            case PATCH_OP_REPLACE: /* replace(path, val) */
-                if (unlikely(path_len == 0)) { root = val; break; }
-                if (unlikely(!ptr_replace(path, val))) {
-                    return_err(POINTER, "failed to replace `path`");
-                }
-                break;
-            case PATCH_OP_MOVE: /* val = remove(from), add(path, val) */
-                if (unlikely(from_len == 0 && path_len == 0)) break;
-                val = ptr_remove(from);
-                if (unlikely(!val)) {
-                    return_err(POINTER, "failed to remove `from`");
-                }
-                if (unlikely(path_len == 0)) { root = val; break; }
-                if (unlikely(!ptr_add(path, val))) {
-                    return_err(POINTER, "failed to add `path`");
-                }
-                break;
-            case PATCH_OP_COPY: /* val = get(from).copy, add(path, val) */
-                val = ptr_get(from);
-                if (unlikely(!val)) {
-                    return_err(POINTER, "failed to get `from`");
-                }
-                if (unlikely(path_len == 0)) { root = val; break; }
-                val = yyjson_mut_val_mut_copy(doc, val);
-                if (unlikely(!val)) return_err_copy();
-                if (unlikely(!ptr_add(path, val))) {
-                    return_err(POINTER, "failed to add `path`");
-                }
-                break;
-            case PATCH_OP_TEST: /* test = get(path), test.eq(val) */
-                test = ptr_get(path);
-                if (unlikely(!test)) {
-                    return_err(POINTER, "failed to get `path`");
-                }
-                if (unlikely(!yyjson_mut_equals(val, test))) {
-                    return_err(EQUAL, "failed to test equal");
-                }
-                break;
-            default:
-                return_err(INVALID_MEMBER, "unsupported `op`");
-        }
-    }
-    return root;
-}
-
-/* macros for yyjson_patch */
-#undef return_err
-#undef return_err_copy
-#undef return_err_key
-#undef return_err_val
-#undef ptr_get
-#undef ptr_add
-#undef ptr_remove
-#undef ptr_replace
-
-
-
-/*==============================================================================
- * JSON Merge-Patch API (RFC 7386)
- *============================================================================*/
-
-yyjson_mut_val *yyjson_merge_patch(yyjson_mut_doc *doc,
-                                   yyjson_val *orig,
-                                   yyjson_val *patch) {
-    usize idx, max;
-    yyjson_val *key, *orig_val, *patch_val, local_orig;
-    yyjson_mut_val *builder, *mut_key, *mut_val, *merged_val;
-    
-    if (unlikely(!yyjson_is_obj(patch))) {
-        return yyjson_val_mut_copy(doc, patch);
-    }
-    
-    builder = yyjson_mut_obj(doc);
-    if (unlikely(!builder)) return NULL;
-    
-    memset(&local_orig, 0, sizeof(local_orig));
-    if (!yyjson_is_obj(orig)) {
-        orig = &local_orig;
-        orig->tag = builder->tag;
-        orig->uni = builder->uni;
-    }
-    
-    /* If orig is contributing, copy any items not modified by the patch */
-    if (orig != &local_orig) {
-        yyjson_obj_foreach(orig, idx, max, key, orig_val) {
-            patch_val = yyjson_obj_getn(patch,
-                                        unsafe_yyjson_get_str(key),
-                                        unsafe_yyjson_get_len(key));
-            if (!patch_val) {
-                mut_key = yyjson_val_mut_copy(doc, key);
-                mut_val = yyjson_val_mut_copy(doc, orig_val);
-                if (!yyjson_mut_obj_add(builder, mut_key, mut_val)) return NULL;
-            }
-        }
-    }
-
-    /* Merge items modified by the patch. */
-    yyjson_obj_foreach(patch, idx, max, key, patch_val) {
-        /* null indicates the field is removed. */
-        if (unsafe_yyjson_is_null(patch_val)) {
-            continue;
-        }
-        mut_key = yyjson_val_mut_copy(doc, key);
-        orig_val = yyjson_obj_getn(orig,
-                                   unsafe_yyjson_get_str(key),
-                                   unsafe_yyjson_get_len(key));
-        merged_val = yyjson_merge_patch(doc, orig_val, patch_val);
-        if (!yyjson_mut_obj_add(builder, mut_key, merged_val)) return NULL;
-    }
-    
-    return builder;
-}
-
-yyjson_mut_val *yyjson_mut_merge_patch(yyjson_mut_doc *doc,
-                                       yyjson_mut_val *orig,
-                                       yyjson_mut_val *patch) {
-    usize idx, max;
-    yyjson_mut_val *key, *orig_val, *patch_val, local_orig;
-    yyjson_mut_val *builder, *mut_key, *mut_val, *merged_val;
-    
-    if (unlikely(!yyjson_mut_is_obj(patch))) {
-        return yyjson_mut_val_mut_copy(doc, patch);
-    }
-    
-    builder = yyjson_mut_obj(doc);
-    if (unlikely(!builder)) return NULL;
-    
-    memset(&local_orig, 0, sizeof(local_orig));
-    if (!yyjson_mut_is_obj(orig)) {
-        orig = &local_orig;
-        orig->tag = builder->tag;
-        orig->uni = builder->uni;
-    }
-    
-    /* If orig is contributing, copy any items not modified by the patch */
-    if (orig != &local_orig) {
-        yyjson_mut_obj_foreach(orig, idx, max, key, orig_val) {
-            patch_val = yyjson_mut_obj_getn(patch,
-                                            unsafe_yyjson_get_str(key),
-                                            unsafe_yyjson_get_len(key));
-            if (!patch_val) {
-                mut_key = yyjson_mut_val_mut_copy(doc, key);
-                mut_val = yyjson_mut_val_mut_copy(doc, orig_val);
-                if (!yyjson_mut_obj_add(builder, mut_key, mut_val)) return NULL;
-            }
-        }
-    }
-
-    /* Merge items modified by the patch. */
-    yyjson_mut_obj_foreach(patch, idx, max, key, patch_val) {
-        /* null indicates the field is removed. */
-        if (unsafe_yyjson_is_null(patch_val)) {
-            continue;
-        }
-        mut_key = yyjson_mut_val_mut_copy(doc, key);
-        orig_val = yyjson_mut_obj_getn(orig,
-                                       unsafe_yyjson_get_str(key),
-                                       unsafe_yyjson_get_len(key));
-        merged_val = yyjson_mut_merge_patch(doc, orig_val, patch_val);
-        if (!yyjson_mut_obj_add(builder, mut_key, merged_val)) return NULL;
-    }
-    
-    return builder;
-}
-
-#endif /* YYJSON_DISABLE_UTILS */
-
-
-
-/*==============================================================================
- * Power10 Lookup Table
- * These data are used by the floating-point number reader and writer.
- *============================================================================*/
-
-#if (!YYJSON_DISABLE_READER || !YYJSON_DISABLE_WRITER) && \
-    (!YYJSON_DISABLE_FAST_FP_CONV)
+/** Table: [ 10^0, ..., 10^19 ] (generate with misc/make_tables.c) */
+static const u64 u64_pow10_table[U64_POW10_MAX_EXP + 1] = {
+    U64(0x00000000, 0x00000001), U64(0x00000000, 0x0000000A),
+    U64(0x00000000, 0x00000064), U64(0x00000000, 0x000003E8),
+    U64(0x00000000, 0x00002710), U64(0x00000000, 0x000186A0),
+    U64(0x00000000, 0x000F4240), U64(0x00000000, 0x00989680),
+    U64(0x00000000, 0x05F5E100), U64(0x00000000, 0x3B9ACA00),
+    U64(0x00000002, 0x540BE400), U64(0x00000017, 0x4876E800),
+    U64(0x000000E8, 0xD4A51000), U64(0x00000918, 0x4E72A000),
+    U64(0x00005AF3, 0x107A4000), U64(0x00038D7E, 0xA4C68000),
+    U64(0x002386F2, 0x6FC10000), U64(0x01634578, 0x5D8A0000),
+    U64(0x0DE0B6B3, 0xA7640000), U64(0x8AC72304, 0x89E80000)
+};
 
 /** Minimum decimal exponent in pow10_sig_table. */
 #define POW10_SIG_TABLE_MIN_EXP -343
@@ -3481,207 +1594,1169 @@ static_inline void pow10_table_get_exp(i32 exp10, i32 *exp2) {
     *exp2 = (exp10 * 217706 - 4128768) >> 16;
 }
 
+
+
+/*==============================================================================
+ * Number and Bits Utils (Private)
+ * These functions are used by the floating-point number reader and writer.
+ *============================================================================*/
+
+/** Returns the number of leading 0-bits in value (input should not be 0). */
+static_inline u32 u64_lz_bits(u64 v) {
+#if GCC_HAS_CLZLL
+    return (u32)__builtin_clzll(v);
+#elif MSC_HAS_BIT_SCAN_64
+    unsigned long r;
+    _BitScanReverse64(&r, v);
+    return (u32)63 - (u32)r;
+#elif MSC_HAS_BIT_SCAN
+    unsigned long hi, lo;
+    bool hi_set = _BitScanReverse(&hi, (u32)(v >> 32)) != 0;
+    _BitScanReverse(&lo, (u32)v);
+    hi |= 32;
+    return (u32)63 - (u32)(hi_set ? hi : lo);
+#else
+    /*
+     branchless, use de Bruijn sequences
+     see: https://www.chessprogramming.org/BitScan
+     */
+    const u8 table[64] = {
+        63, 16, 62,  7, 15, 36, 61,  3,  6, 14, 22, 26, 35, 47, 60,  2,
+         9,  5, 28, 11, 13, 21, 42, 19, 25, 31, 34, 40, 46, 52, 59,  1,
+        17,  8, 37,  4, 23, 27, 48, 10, 29, 12, 43, 20, 32, 41, 53, 18,
+        38, 24, 49, 30, 44, 33, 54, 39, 50, 45, 55, 51, 56, 57, 58,  0
+    };
+    v |= v >> 1;
+    v |= v >> 2;
+    v |= v >> 4;
+    v |= v >> 8;
+    v |= v >> 16;
+    v |= v >> 32;
+    return table[(v * U64(0x03F79D71, 0xB4CB0A89)) >> 58];
+#endif
+}
+
+/** Returns the number of trailing 0-bits in value (input should not be 0). */
+static_inline u32 u64_tz_bits(u64 v) {
+#if GCC_HAS_CTZLL
+    return (u32)__builtin_ctzll(v);
+#elif MSC_HAS_BIT_SCAN_64
+    unsigned long r;
+    _BitScanForward64(&r, v);
+    return (u32)r;
+#elif MSC_HAS_BIT_SCAN
+    unsigned long lo, hi;
+    bool lo_set = _BitScanForward(&lo, (u32)(v)) != 0;
+    _BitScanForward(&hi, (u32)(v >> 32));
+    hi += 32;
+    return lo_set ? lo : hi;
+#else
+    /*
+     branchless, use de Bruijn sequences
+     see: https://www.chessprogramming.org/BitScan
+     */
+    const u8 table[64] = {
+         0,  1,  2, 53,  3,  7, 54, 27,  4, 38, 41,  8, 34, 55, 48, 28,
+        62,  5, 39, 46, 44, 42, 22,  9, 24, 35, 59, 56, 49, 18, 29, 11,
+        63, 52,  6, 26, 37, 40, 33, 47, 61, 45, 43, 21, 23, 58, 17, 10,
+        51, 25, 36, 32, 60, 20, 57, 16, 50, 31, 19, 15, 30, 14, 13, 12
+    };
+    return table[((v & (~v + 1)) * U64(0x022FDD63, 0xCC95386D)) >> 58];
+#endif
+}
+
+/** Convert raw binary to double. */
+static_inline f64 f64_from_raw(u64 u) {
+    /* use memcpy to avoid violating the strict aliasing rule */
+    f64 f;
+    memcpy(&f, &u, 8);
+    return f;
+}
+
+/** Convert double to raw binary. */
+static_inline u64 f64_to_raw(f64 f) {
+    /* use memcpy to avoid violating the strict aliasing rule */
+    u64 u;
+    memcpy(&u, &f, 8);
+    return u;
+}
+
+/** Get raw 'infinity' with sign. */
+static_inline u64 f64_raw_get_inf(bool sign) {
+#if YYJSON_HAS_IEEE_754
+    return F64_RAW_INF | ((u64)sign << 63);
+#elif defined(INFINITY)
+    return f64_to_raw(sign ? -INFINITY : INFINITY);
+#else
+    return f64_to_raw(sign ? -HUGE_VAL : HUGE_VAL);
+#endif
+}
+
+/** Get raw 'nan' with sign. */
+static_inline u64 f64_raw_get_nan(bool sign) {
+#if YYJSON_HAS_IEEE_754
+    return F64_RAW_NAN | ((u64)sign << 63);
+#elif defined(NAN)
+    return f64_to_raw(sign ? (f64)-NAN : (f64)NAN);
+#else
+    return f64_to_raw((sign ? -0.0 : 0.0) / 0.0);
+#endif
+}
+
+/** Convert normalized u64 (highest bit is 1) to f64.
+    Some compiler (such as Microsoft Visual C++ 6.0) do not support converting
+    number from u64 to f64. This function will first convert u64 to i64 and then
+    to f64, with `to nearest` rounding mode. */
+static_inline f64 normalized_u64_to_f64(u64 val) {
+#if YYJSON_U64_TO_F64_NO_IMPL
+    i64 sig = (i64)((val >> 1) | (val & 1));
+    return ((f64)sig) * (f64)2.0;
+#else
+    return (f64)val;
+#endif
+}
+
+/** Multiplies two 64-bit unsigned integers (a * b),
+    returns the 128-bit result as 'hi' and 'lo'. */
+static_inline void u128_mul(u64 a, u64 b, u64 *hi, u64 *lo) {
+#if YYJSON_HAS_INT128
+    u128 m = (u128)a * b;
+    *hi = (u64)(m >> 64);
+    *lo = (u64)(m);
+#elif MSC_HAS_UMUL128
+    *lo = _umul128(a, b, hi);
+#else
+    u32 a0 = (u32)(a), a1 = (u32)(a >> 32);
+    u32 b0 = (u32)(b), b1 = (u32)(b >> 32);
+    u64 p00 = (u64)a0 * b0, p01 = (u64)a0 * b1;
+    u64 p10 = (u64)a1 * b0, p11 = (u64)a1 * b1;
+    u64 m0 = p01 + (p00 >> 32);
+    u32 m00 = (u32)(m0), m01 = (u32)(m0 >> 32);
+    u64 m1 = p10 + m00;
+    u32 m10 = (u32)(m1), m11 = (u32)(m1 >> 32);
+    *hi = p11 + m01 + m11;
+    *lo = ((u64)m10 << 32) | (u32)p00;
+#endif
+}
+
+/** Multiplies two 64-bit unsigned integers and add a value (a * b + c),
+    returns the 128-bit result as 'hi' and 'lo'. */
+static_inline void u128_mul_add(u64 a, u64 b, u64 c, u64 *hi, u64 *lo) {
+#if YYJSON_HAS_INT128
+    u128 m = (u128)a * b + c;
+    *hi = (u64)(m >> 64);
+    *lo = (u64)(m);
+#else
+    u64 h, l, t;
+    u128_mul(a, b, &h, &l);
+    t = l + c;
+    h += (u64)(((t < l) | (t < c)));
+    *hi = h;
+    *lo = t;
+#endif
+}
+
+
+
+/*==============================================================================
+ * File Utils (Private)
+ * These functions are used to read and write JSON files.
+ *============================================================================*/
+
+#define YYJSON_FOPEN_EXT
+#if !defined(_MSC_VER) && defined(__GLIBC__) && defined(__GLIBC_PREREQ)
+#   if __GLIBC_PREREQ(2, 7)
+#       undef YYJSON_FOPEN_EXT
+#       define YYJSON_FOPEN_EXT "e" /* glibc extension to enable O_CLOEXEC */
+#   endif
 #endif
 
-
-
-/*==============================================================================
- * JSON Character Matcher
- *============================================================================*/
-
-/** Character type */
-typedef u8 char_type;
-
-/** Whitespace character: ' ', '\\t', '\\n', '\\r'. */
-static const char_type CHAR_TYPE_SPACE      = 1 << 0;
-
-/** Number character: '-', [0-9]. */
-static const char_type CHAR_TYPE_NUMBER     = 1 << 1;
-
-/** JSON Escaped character: '"', '\', [0x00-0x1F]. */
-static const char_type CHAR_TYPE_ESC_ASCII  = 1 << 2;
-
-/** Non-ASCII character: [0x80-0xFF]. */
-static const char_type CHAR_TYPE_NON_ASCII  = 1 << 3;
-
-/** JSON container character: '{', '['. */
-static const char_type CHAR_TYPE_CONTAINER  = 1 << 4;
-
-/** Comment character: '/'. */
-static const char_type CHAR_TYPE_COMMENT    = 1 << 5;
-
-/** Line end character: '\\n', '\\r', '\0'. */
-static const char_type CHAR_TYPE_LINE_END   = 1 << 6;
-
-/** Hexadecimal numeric character: [0-9a-fA-F]. */
-static const char_type CHAR_TYPE_HEX        = 1 << 7;
-
-/** Character type table (generate with misc/make_tables.c) */
-static const char_type char_table[256] = {
-    0x44, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04,
-    0x04, 0x05, 0x45, 0x04, 0x04, 0x45, 0x04, 0x04,
-    0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04,
-    0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04,
-    0x01, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x20,
-    0x82, 0x82, 0x82, 0x82, 0x82, 0x82, 0x82, 0x82,
-    0x82, 0x82, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x10, 0x04, 0x00, 0x00, 0x00,
-    0x00, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00,
-    0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
-    0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
-    0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
-    0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
-    0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
-    0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
-    0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
-    0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
-    0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
-    0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
-    0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
-    0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
-    0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
-    0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
-    0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
-    0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08
-};
-
-/** Match a character with specified type. */
-static_inline bool char_is_type(u8 c, char_type type) {
-    return (char_table[c] & type) != 0;
+static_inline FILE *fopen_safe(const char *path, const char *mode) {
+#if YYJSON_MSC_VER >= 1400
+    FILE *file = NULL;
+    if (fopen_s(&file, path, mode) != 0) return NULL;
+    return file;
+#else
+    return fopen(path, mode);
+#endif
 }
 
-/** Match a whitespace: ' ', '\\t', '\\n', '\\r'. */
-static_inline bool char_is_space(u8 c) {
-    return char_is_type(c, (char_type)CHAR_TYPE_SPACE);
+static_inline FILE *fopen_readonly(const char *path) {
+    return fopen_safe(path, "rb" YYJSON_FOPEN_EXT);
 }
 
-/** Match a whitespace or comment: ' ', '\\t', '\\n', '\\r', '/'. */
-static_inline bool char_is_space_or_comment(u8 c) {
-    return char_is_type(c, (char_type)(CHAR_TYPE_SPACE | CHAR_TYPE_COMMENT));
+static_inline FILE *fopen_writeonly(const char *path) {
+    return fopen_safe(path, "wb" YYJSON_FOPEN_EXT);
 }
 
-/** Match a JSON number: '-', [0-9]. */
-static_inline bool char_is_number(u8 c) {
-    return char_is_type(c, (char_type)CHAR_TYPE_NUMBER);
-}
-
-/** Match a JSON container: '{', '['. */
-static_inline bool char_is_container(u8 c) {
-    return char_is_type(c, (char_type)CHAR_TYPE_CONTAINER);
-}
-
-/** Match a stop character in ASCII string: '"', '\', [0x00-0x1F,0x80-0xFF]. */
-static_inline bool char_is_ascii_stop(u8 c) {
-    return char_is_type(c, (char_type)(CHAR_TYPE_ESC_ASCII |
-                                       CHAR_TYPE_NON_ASCII));
-}
-
-/** Match a line end character: '\\n', '\\r', '\0'. */
-static_inline bool char_is_line_end(u8 c) {
-    return char_is_type(c, (char_type)CHAR_TYPE_LINE_END);
-}
-
-/** Match a hexadecimal numeric character: [0-9a-fA-F]. */
-static_inline bool char_is_hex(u8 c) {
-    return char_is_type(c, (char_type)CHAR_TYPE_HEX);
+static_inline usize fread_safe(void *buf, usize size, FILE *file) {
+#if YYJSON_MSC_VER >= 1400
+    return fread_s(buf, size, 1, size, file);
+#else
+    return fread(buf, 1, size, file);
+#endif
 }
 
 
 
 /*==============================================================================
- * Digit Character Matcher
+ * Size Utils (Private)
+ * These functions are used for memory allocation.
  *============================================================================*/
 
-/** Digit type */
-typedef u8 digi_type;
+/** Returns whether the size is overflow after increment. */
+static_inline bool size_add_is_overflow(usize size, usize add) {
+    return size > (size + add);
+}
 
-/** Digit: '0'. */
-static const digi_type DIGI_TYPE_ZERO       = 1 << 0;
+/** Returns whether the size is power of 2 (size should not be 0). */
+static_inline bool size_is_pow2(usize size) {
+    return (size & (size - 1)) == 0;
+}
 
-/** Digit: [1-9]. */
-static const digi_type DIGI_TYPE_NONZERO    = 1 << 1;
+/** Align size upwards (may overflow). */
+static_inline usize size_align_up(usize size, usize align) {
+    if (size_is_pow2(align)) {
+        return (size + (align - 1)) & ~(align - 1);
+    } else {
+        return size + align - (size + align - 1) % align - 1;
+    }
+}
 
-/** Plus sign (positive): '+'. */
-static const digi_type DIGI_TYPE_POS        = 1 << 2;
+/** Align size downwards. */
+static_inline usize size_align_down(usize size, usize align) {
+    if (size_is_pow2(align)) {
+        return size & ~(align - 1);
+    } else {
+        return size - (size % align);
+    }
+}
 
-/** Minus sign (negative): '-'. */
-static const digi_type DIGI_TYPE_NEG        = 1 << 3;
+/** Align address upwards (may overflow). */
+static_inline void *mem_align_up(void *mem, usize align) {
+    usize size;
+    memcpy(&size, &mem, sizeof(usize));
+    size = size_align_up(size, align);
+    memcpy(&mem, &size, sizeof(usize));
+    return mem;
+}
 
-/** Decimal point: '.' */
-static const digi_type DIGI_TYPE_DOT        = 1 << 4;
 
-/** Exponent sign: 'e, 'E'. */
-static const digi_type DIGI_TYPE_EXP        = 1 << 5;
 
-/** Digit type table (generate with misc/make_tables.c) */
-static const digi_type digi_table[256] = {
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x04, 0x00, 0x08, 0x10, 0x00,
-    0x01, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02,
-    0x02, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+/*==============================================================================
+ * Default Memory Allocator (Private)
+ * This is a simple libc memory allocator wrapper.
+ *============================================================================*/
+
+static void *default_malloc(void *ctx, usize size) {
+    return malloc(size);
+}
+
+static void *default_realloc(void *ctx, void *ptr, usize old_size, usize size) {
+    return realloc(ptr, size);
+}
+
+static void default_free(void *ctx, void *ptr) {
+    free(ptr);
+}
+
+static const yyjson_alc YYJSON_DEFAULT_ALC = {
+    default_malloc,
+    default_realloc,
+    default_free,
+    NULL
 };
 
-/** Match a character with specified type. */
-static_inline bool digi_is_type(u8 d, digi_type type) {
-    return (digi_table[d] & type) != 0;
+
+
+/*==============================================================================
+ * Null Memory Allocator (Private)
+ *
+ * This allocator is just a placeholder to ensure that the internal
+ * malloc/realloc/free function pointers are not null.
+ *============================================================================*/
+
+static void *null_malloc(void *ctx, usize size) {
+    return NULL;
 }
 
-/** Match a sign: '+', '-' */
-static_inline bool digi_is_sign(u8 d) {
-    return digi_is_type(d, (digi_type)(DIGI_TYPE_POS | DIGI_TYPE_NEG));
+static void *null_realloc(void *ctx, void *ptr, usize old_size, usize size) {
+    return NULL;
 }
 
-/** Match a none zero digit: [1-9] */
-static_inline bool digi_is_nonzero(u8 d) {
-    return digi_is_type(d, (digi_type)DIGI_TYPE_NONZERO);
+static void null_free(void *ctx, void *ptr) {
+    return;
 }
 
-/** Match a digit: [0-9] */
-static_inline bool digi_is_digit(u8 d) {
-    return digi_is_type(d, (digi_type)(DIGI_TYPE_ZERO | DIGI_TYPE_NONZERO));
+static const yyjson_alc YYJSON_NULL_ALC = {
+    null_malloc,
+    null_realloc,
+    null_free,
+    NULL
+};
+
+
+
+/*==============================================================================
+ * Pool Memory Allocator
+ *
+ * This allocator is initialized with a fixed-size buffer.
+ * The buffer is split into multiple memory chunks for memory allocation.
+ *============================================================================*/
+
+/** memory chunk header */
+typedef struct pool_chunk {
+    usize size; /* chunk memory size, include chunk header */
+    struct pool_chunk *next; /* linked list, nullable */
+    /* char mem[]; flexible array member */
+} pool_chunk;
+
+/** allocator ctx header */
+typedef struct pool_ctx {
+    usize size; /* total memory size, include ctx header */
+    pool_chunk *free_list; /* linked list, nullable */
+    /* pool_chunk chunks[]; flexible array member */
+} pool_ctx;
+
+/** align up the input size to chunk size */
+static_inline void pool_size_align(usize *size) {
+    *size = size_align_up(*size, sizeof(pool_chunk)) + sizeof(pool_chunk);
 }
 
-/** Match an exponent sign: 'e', 'E'. */
-static_inline bool digi_is_exp(u8 d) {
-    return digi_is_type(d, (digi_type)DIGI_TYPE_EXP);
+static void *pool_malloc(void *ctx_ptr, usize size) {
+    /* assert(size != 0) */
+    pool_ctx *ctx = (pool_ctx *)ctx_ptr;
+    pool_chunk *next, *prev = NULL, *cur = ctx->free_list;
+    
+    if (unlikely(size >= ctx->size)) return NULL;
+    pool_size_align(&size);
+    
+    while (cur) {
+        if (cur->size < size) {
+            /* not enough space, try next chunk */
+            prev = cur;
+            cur = cur->next;
+            continue;
+        }
+        if (cur->size >= size + sizeof(pool_chunk) * 2) {
+            /* too much space, split this chunk */
+            next = (pool_chunk *)(void *)((u8 *)cur + size);
+            next->size = cur->size - size;
+            next->next = cur->next;
+            cur->size = size;
+        } else {
+            /* just enough space, use whole chunk */
+            next = cur->next;
+        }
+        if (prev) prev->next = next;
+        else ctx->free_list = next;
+        return (void *)(cur + 1);
+    }
+    return NULL;
 }
 
-/** Match a floating point indicator: '.', 'e', 'E'. */
-static_inline bool digi_is_fp(u8 d) {
-    return digi_is_type(d, (digi_type)(DIGI_TYPE_DOT | DIGI_TYPE_EXP));
+static void pool_free(void *ctx_ptr, void *ptr) {
+    /* assert(ptr != NULL) */
+    pool_ctx *ctx = (pool_ctx *)ctx_ptr;
+    pool_chunk *cur = ((pool_chunk *)ptr) - 1;
+    pool_chunk *prev = NULL, *next = ctx->free_list;
+    
+    while (next && next < cur) {
+        prev = next;
+        next = next->next;
+    }
+    if (prev) prev->next = cur;
+    else ctx->free_list = cur;
+    cur->next = next;
+    
+    if (next && ((u8 *)cur + cur->size) == (u8 *)next) {
+        /* merge cur to higher chunk */
+        cur->size += next->size;
+        cur->next = next->next;
+    }
+    if (prev && ((u8 *)prev + prev->size) == (u8 *)cur) {
+        /* merge cur to lower chunk */
+        prev->size += cur->size;
+        prev->next = cur->next;
+    }
 }
 
-/** Match a digit or floating point indicator: [0-9], '.', 'e', 'E'. */
-static_inline bool digi_is_digit_or_fp(u8 d) {
-    return digi_is_type(d, (digi_type)(DIGI_TYPE_ZERO | DIGI_TYPE_NONZERO |
-                                       DIGI_TYPE_DOT | DIGI_TYPE_EXP));
+static void *pool_realloc(void *ctx_ptr, void *ptr,
+                          usize old_size, usize size) {
+    /* assert(ptr != NULL && size != 0 && old_size < size) */
+    pool_ctx *ctx = (pool_ctx *)ctx_ptr;
+    pool_chunk *cur = ((pool_chunk *)ptr) - 1, *prev, *next, *tmp;
+    
+    /* check size */
+    if (unlikely(size >= ctx->size)) return NULL;
+    pool_size_align(&old_size);
+    pool_size_align(&size);
+    if (unlikely(old_size == size)) return ptr;
+    
+    /* find next and prev chunk */
+    prev = NULL;
+    next = ctx->free_list;
+    while (next && next < cur) {
+        prev = next;
+        next = next->next;
+    }
+    
+    if ((u8 *)cur + cur->size == (u8 *)next && cur->size + next->size >= size) {
+        /* merge to higher chunk if they are contiguous */
+        usize free_size = cur->size + next->size - size;
+        if (free_size > sizeof(pool_chunk) * 2) {
+            tmp = (pool_chunk *)(void *)((u8 *)cur + size);
+            if (prev) prev->next = tmp;
+            else ctx->free_list = tmp;
+            tmp->next = next->next;
+            tmp->size = free_size;
+            cur->size = size;
+        } else {
+            if (prev) prev->next = next->next;
+            else ctx->free_list = next->next;
+            cur->size += next->size;
+        }
+        return ptr;
+    } else {
+        /* fallback to malloc and memcpy */
+        void *new_ptr = pool_malloc(ctx_ptr, size - sizeof(pool_chunk));
+        if (new_ptr) {
+            memcpy(new_ptr, ptr, cur->size - sizeof(pool_chunk));
+            pool_free(ctx_ptr, ptr);
+        }
+        return new_ptr;
+    }
+}
+
+bool yyjson_alc_pool_init(yyjson_alc *alc, void *buf, usize size) {
+    pool_chunk *chunk;
+    pool_ctx *ctx;
+    
+    if (unlikely(!alc)) return false;
+    *alc = YYJSON_NULL_ALC;
+    if (size < sizeof(pool_ctx) * 4) return false;
+    ctx = (pool_ctx *)mem_align_up(buf, sizeof(pool_ctx));
+    if (unlikely(!ctx)) return false;
+    size -= (usize)((u8 *)ctx - (u8 *)buf);
+    size = size_align_down(size, sizeof(pool_ctx));
+    
+    chunk = (pool_chunk *)(ctx + 1);
+    chunk->size = size - sizeof(pool_ctx);
+    chunk->next = NULL;
+    ctx->size = size;
+    ctx->free_list = chunk;
+    
+    alc->malloc = pool_malloc;
+    alc->realloc = pool_realloc;
+    alc->free = pool_free;
+    alc->ctx = (void *)ctx;
+    return true;
 }
 
 
+
+/*==============================================================================
+ * Dynamic Memory Allocator
+ *
+ * This allocator allocates memory on demand and does not immediately release
+ * unused memory. Instead, it places the unused memory into a freelist for
+ * potential reuse in the future. It is only when the entire allocator is
+ * destroyed that all previously allocated memory is released at once.
+ *============================================================================*/
+
+/** memory chunk header */
+typedef struct dyn_chunk {
+    usize size; /* chunk size, include header */
+    struct dyn_chunk *next;
+    /* char mem[]; flexible array member */
+} dyn_chunk;
+
+/** allocator ctx header */
+typedef struct {
+    dyn_chunk free_list; /* dummy header, sorted from small to large */
+    dyn_chunk used_list; /* dummy header */
+} dyn_ctx;
+
+/** align up the input size to chunk size */
+static_inline bool dyn_size_align(usize *size) {
+    usize alc_size = *size + sizeof(dyn_chunk);
+    alc_size = size_align_up(alc_size, YYJSON_ALC_DYN_MIN_SIZE);
+    if (unlikely(alc_size < *size)) return false; /* overflow */
+    *size = alc_size;
+    return true;
+}
+
+/** remove a chunk from list (the chunk must already be in the list) */
+static_inline void dyn_chunk_list_remove(dyn_chunk *list, dyn_chunk *chunk) {
+    dyn_chunk *prev = list, *cur;
+    for (cur = prev->next; cur; cur = cur->next) {
+        if (cur == chunk) {
+            prev->next = cur->next;
+            cur->next = NULL;
+            return;
+        }
+        prev = cur;
+    }
+}
+
+/** add a chunk to list header (the chunk must not be in the list) */
+static_inline void dyn_chunk_list_add(dyn_chunk *list, dyn_chunk *chunk) {
+    chunk->next = list->next;
+    list->next = chunk;
+}
+
+static void *dyn_malloc(void *ctx_ptr, usize size) {
+    /* assert(size != 0) */
+    const yyjson_alc def = YYJSON_DEFAULT_ALC;
+    dyn_ctx *ctx = (dyn_ctx *)ctx_ptr;
+    dyn_chunk *chunk, *prev, *next;
+    if (unlikely(!dyn_size_align(&size))) return NULL;
+    
+    /* freelist is empty, create new chunk */
+    if (!ctx->free_list.next) {
+        chunk = (dyn_chunk *)def.malloc(def.ctx, size);
+        if (unlikely(!chunk)) return NULL;
+        chunk->size = size;
+        chunk->next = NULL;
+        dyn_chunk_list_add(&ctx->used_list, chunk);
+        return (void *)(chunk + 1);
+    }
+    
+    /* find a large enough chunk, or resize the largest chunk */
+    prev = &ctx->free_list;
+    while (true) {
+        chunk = prev->next;
+        if (chunk->size >= size) { /* enough size, reuse this chunk */
+            prev->next = chunk->next;
+            dyn_chunk_list_add(&ctx->used_list, chunk);
+            return (void *)(chunk + 1);
+        }
+        if (!chunk->next) { /* resize the largest chunk */
+            chunk = (dyn_chunk *)def.realloc(def.ctx, chunk, chunk->size, size);
+            if (unlikely(!chunk)) return NULL;
+            prev->next = NULL;
+            chunk->size = size;
+            dyn_chunk_list_add(&ctx->used_list, chunk);
+            return (void *)(chunk + 1);
+        }
+        prev = chunk;
+    }
+}
+
+static void *dyn_realloc(void *ctx_ptr, void *ptr,
+                          usize old_size, usize size) {
+    /* assert(ptr != NULL && size != 0 && old_size < size) */
+    const yyjson_alc def = YYJSON_DEFAULT_ALC;
+    dyn_ctx *ctx = (dyn_ctx *)ctx_ptr;
+    dyn_chunk *prev, *next, *new_chunk;
+    dyn_chunk *chunk = (dyn_chunk *)ptr - 1;
+    if (unlikely(!dyn_size_align(&size))) return NULL;
+    if (chunk->size >= size) return ptr;
+    
+    dyn_chunk_list_remove(&ctx->used_list, chunk);
+    new_chunk = (dyn_chunk *)def.realloc(def.ctx, chunk, chunk->size, size);
+    if (likely(new_chunk)) {
+        new_chunk->size = size;
+        chunk = new_chunk;
+    }
+    dyn_chunk_list_add(&ctx->used_list, chunk);
+    return new_chunk ? (void *)(new_chunk + 1) : NULL;
+}
+
+static void dyn_free(void *ctx_ptr, void *ptr) {
+    /* assert(ptr != NULL) */
+    dyn_ctx *ctx = (dyn_ctx *)ctx_ptr;
+    dyn_chunk *chunk = (dyn_chunk *)ptr - 1, *prev;
+    
+    dyn_chunk_list_remove(&ctx->used_list, chunk);
+    for (prev = &ctx->free_list; prev; prev = prev->next) {
+        if (!prev->next || prev->next->size >= chunk->size) {
+            chunk->next = prev->next;
+            prev->next = chunk;
+            break;
+        }
+    }
+}
+
+yyjson_alc *yyjson_alc_dyn_new(void) {
+    const yyjson_alc def = YYJSON_DEFAULT_ALC;
+    usize hdr_len = sizeof(yyjson_alc) + sizeof(dyn_ctx);
+    yyjson_alc *alc = (yyjson_alc *)def.malloc(def.ctx, hdr_len);
+    dyn_ctx *ctx = (dyn_ctx *)(void *)(alc + 1);
+    if (unlikely(!alc)) return NULL;
+    alc->malloc = dyn_malloc;
+    alc->realloc = dyn_realloc;
+    alc->free = dyn_free;
+    alc->ctx = alc + 1;
+    memset(ctx, 0, sizeof(*ctx));
+    return alc;
+}
+
+void yyjson_alc_dyn_free(yyjson_alc *alc) {
+    const yyjson_alc def = YYJSON_DEFAULT_ALC;
+    dyn_ctx *ctx = (dyn_ctx *)(void *)(alc + 1);
+    dyn_chunk *chunk, *next;
+    if (unlikely(!alc)) return;
+    for (chunk = ctx->free_list.next; chunk; chunk = next) {
+        next = chunk->next;
+        def.free(def.ctx, chunk);
+    }
+    for (chunk = ctx->used_list.next; chunk; chunk = next) {
+        next = chunk->next;
+        def.free(def.ctx, chunk);
+    }
+    def.free(def.ctx, alc);
+}
+
+
+
+/*==============================================================================
+ * JSON Struct Utils
+ *
+ * These functions are used for creating, copying, releasing, and comparing
+ * JSON documents and values. They are widely used throughout this library.
+ *============================================================================*/
+
+static_inline void unsafe_yyjson_str_pool_release(yyjson_str_pool *pool,
+                                                  yyjson_alc *alc) {
+    yyjson_str_chunk *chunk = pool->chunks, *next;
+    while (chunk) {
+        next = chunk->next;
+        alc->free(alc->ctx, chunk);
+        chunk = next;
+    }
+}
+
+static_inline void unsafe_yyjson_val_pool_release(yyjson_val_pool *pool,
+                                                  yyjson_alc *alc) {
+    yyjson_val_chunk *chunk = pool->chunks, *next;
+    while (chunk) {
+        next = chunk->next;
+        alc->free(alc->ctx, chunk);
+        chunk = next;
+    }
+}
+
+bool unsafe_yyjson_str_pool_grow(yyjson_str_pool *pool,
+                                 const yyjson_alc *alc, usize len) {
+    yyjson_str_chunk *chunk;
+    usize size, max_len;
+    
+    /* create a new chunk */
+    max_len = USIZE_MAX - sizeof(yyjson_str_chunk);
+    if (unlikely(len > max_len)) return false;
+    size = len + sizeof(yyjson_str_chunk);
+    size = yyjson_max(pool->chunk_size, size);
+    chunk = (yyjson_str_chunk *)alc->malloc(alc->ctx, size);
+    if (unlikely(!chunk)) return false;
+    
+    /* insert the new chunk as the head of the linked list */
+    chunk->next = pool->chunks;
+    chunk->chunk_size = size;
+    pool->chunks = chunk;
+    pool->cur = (char *)chunk + sizeof(yyjson_str_chunk);
+    pool->end = (char *)chunk + size;
+    
+    /* the next chunk is twice the size of the current one */
+    size = yyjson_min(pool->chunk_size * 2, pool->chunk_size_max);
+    if (size < pool->chunk_size) size = pool->chunk_size_max; /* overflow */
+    pool->chunk_size = size;
+    return true;
+}
+
+bool unsafe_yyjson_val_pool_grow(yyjson_val_pool *pool,
+                                 const yyjson_alc *alc, usize count) {
+    yyjson_val_chunk *chunk;
+    usize size, max_count;
+    
+    /* create a new chunk */
+    max_count = USIZE_MAX / sizeof(yyjson_mut_val) - 1;
+    if (unlikely(count > max_count)) return false;
+    size = (count + 1) * sizeof(yyjson_mut_val);
+    size = yyjson_max(pool->chunk_size, size);
+    chunk = (yyjson_val_chunk *)alc->malloc(alc->ctx, size);
+    if (unlikely(!chunk)) return false;
+    
+    /* insert the new chunk as the head of the linked list */
+    chunk->next = pool->chunks;
+    chunk->chunk_size = size;
+    pool->chunks = chunk;
+    pool->cur = (yyjson_mut_val *)(void *)((u8 *)chunk) + 1;
+    pool->end = (yyjson_mut_val *)(void *)((u8 *)chunk + size);
+    
+    /* the next chunk is twice the size of the current one */
+    size = yyjson_min(pool->chunk_size * 2, pool->chunk_size_max);
+    if (size < pool->chunk_size) size = pool->chunk_size_max; /* overflow */
+    pool->chunk_size = size;
+    return true;
+}
+
+bool yyjson_mut_doc_set_str_pool_size(yyjson_mut_doc *doc, size_t len) {
+    usize max_size = USIZE_MAX - sizeof(yyjson_str_chunk);
+    if (!doc || !len || len > max_size) return false;
+    doc->str_pool.chunk_size = len + sizeof(yyjson_str_chunk);
+    return true;
+}
+
+bool yyjson_mut_doc_set_val_pool_size(yyjson_mut_doc *doc, size_t count) {
+    usize max_count = USIZE_MAX / sizeof(yyjson_mut_val) - 1;
+    if (!doc || !count || count > max_count) return false;
+    doc->val_pool.chunk_size = (count + 1) * sizeof(yyjson_mut_val);
+    return true;
+}
+
+void yyjson_mut_doc_free(yyjson_mut_doc *doc) {
+    if (doc) {
+        yyjson_alc alc = doc->alc;
+        memset(&doc->alc, 0, sizeof(alc));
+        unsafe_yyjson_str_pool_release(&doc->str_pool, &alc);
+        unsafe_yyjson_val_pool_release(&doc->val_pool, &alc);
+        alc.free(alc.ctx, doc);
+    }
+}
+
+yyjson_mut_doc *yyjson_mut_doc_new(const yyjson_alc *alc) {
+    yyjson_mut_doc *doc;
+    if (!alc) alc = &YYJSON_DEFAULT_ALC;
+    doc = (yyjson_mut_doc *)alc->malloc(alc->ctx, sizeof(yyjson_mut_doc));
+    if (!doc) return NULL;
+    memset(doc, 0, sizeof(yyjson_mut_doc));
+    
+    doc->alc = *alc;
+    doc->str_pool.chunk_size = YYJSON_MUT_DOC_STR_POOL_INIT_SIZE;
+    doc->str_pool.chunk_size_max = YYJSON_MUT_DOC_STR_POOL_MAX_SIZE;
+    doc->val_pool.chunk_size = YYJSON_MUT_DOC_VAL_POOL_INIT_SIZE;
+    doc->val_pool.chunk_size_max = YYJSON_MUT_DOC_VAL_POOL_MAX_SIZE;
+    return doc;
+}
+
+yyjson_mut_doc *yyjson_doc_mut_copy(yyjson_doc *doc, const yyjson_alc *alc) {
+    yyjson_mut_doc *m_doc;
+    yyjson_mut_val *m_val;
+    
+    if (!doc || !doc->root) return NULL;
+    m_doc = yyjson_mut_doc_new(alc);
+    if (!m_doc) return NULL;
+    m_val = yyjson_val_mut_copy(m_doc, doc->root);
+    if (!m_val) {
+        yyjson_mut_doc_free(m_doc);
+        return NULL;
+    }
+    yyjson_mut_doc_set_root(m_doc, m_val);
+    return m_doc;
+}
+
+yyjson_mut_doc *yyjson_mut_doc_mut_copy(yyjson_mut_doc *doc,
+                                        const yyjson_alc *alc) {
+    yyjson_mut_doc *m_doc;
+    yyjson_mut_val *m_val;
+    
+    if (!doc) return NULL;
+    if (!doc->root) return yyjson_mut_doc_new(alc);
+    
+    m_doc = yyjson_mut_doc_new(alc);
+    if (!m_doc) return NULL;
+    m_val = yyjson_mut_val_mut_copy(m_doc, doc->root);
+    if (!m_val) {
+        yyjson_mut_doc_free(m_doc);
+        return NULL;
+    }
+    yyjson_mut_doc_set_root(m_doc, m_val);
+    return m_doc;
+}
+
+yyjson_mut_val *yyjson_val_mut_copy(yyjson_mut_doc *m_doc,
+                                    yyjson_val *i_vals) {
+    /*
+     The immutable object or array stores all sub-values in a contiguous memory,
+     We copy them to another contiguous memory as mutable values,
+     then reconnect the mutable values with the original relationship.
+     */
+    usize i_vals_len;
+    yyjson_mut_val *m_vals, *m_val;
+    yyjson_val *i_val, *i_end;
+    
+    if (!m_doc || !i_vals) return NULL;
+    i_end = unsafe_yyjson_get_next(i_vals);
+    i_vals_len = (usize)(unsafe_yyjson_get_next(i_vals) - i_vals);
+    m_vals = unsafe_yyjson_mut_val(m_doc, i_vals_len);
+    if (!m_vals) return NULL;
+    i_val = i_vals;
+    m_val = m_vals;
+    
+    for (; i_val < i_end; i_val++, m_val++) {
+        yyjson_type type = unsafe_yyjson_get_type(i_val);
+        m_val->tag = i_val->tag;
+        m_val->uni.u64 = i_val->uni.u64;
+        if (type == YYJSON_TYPE_STR || type == YYJSON_TYPE_RAW) {
+            const char *str = i_val->uni.str;
+            usize str_len = unsafe_yyjson_get_len(i_val);
+            m_val->uni.str = unsafe_yyjson_mut_strncpy(m_doc, str, str_len);
+            if (!m_val->uni.str) return NULL;
+        } else if (type == YYJSON_TYPE_ARR) {
+            usize len = unsafe_yyjson_get_len(i_val);
+            if (len > 0) {
+                yyjson_val *ii_val = i_val + 1, *ii_next;
+                yyjson_mut_val *mm_val = m_val + 1, *mm_ctn = m_val, *mm_next;
+                while (len-- > 1) {
+                    ii_next = unsafe_yyjson_get_next(ii_val);
+                    mm_next = mm_val + (ii_next - ii_val);
+                    mm_val->next = mm_next;
+                    ii_val = ii_next;
+                    mm_val = mm_next;
+                }
+                mm_val->next = mm_ctn + 1;
+                mm_ctn->uni.ptr = mm_val;
+            }
+        } else if (type == YYJSON_TYPE_OBJ) {
+            usize len = unsafe_yyjson_get_len(i_val);
+            if (len > 0) {
+                yyjson_val *ii_key = i_val + 1, *ii_nextkey;
+                yyjson_mut_val *mm_key = m_val + 1, *mm_ctn = m_val;
+                yyjson_mut_val *mm_nextkey;
+                while (len-- > 1) {
+                    ii_nextkey = unsafe_yyjson_get_next(ii_key + 1);
+                    mm_nextkey = mm_key + (ii_nextkey - ii_key);
+                    mm_key->next = mm_key + 1;
+                    mm_key->next->next = mm_nextkey;
+                    ii_key = ii_nextkey;
+                    mm_key = mm_nextkey;
+                }
+                mm_key->next = mm_key + 1;
+                mm_key->next->next = mm_ctn + 1;
+                mm_ctn->uni.ptr = mm_key;
+            }
+        }
+    }
+    
+    return m_vals;
+}
+
+static yyjson_mut_val *unsafe_yyjson_mut_val_mut_copy(yyjson_mut_doc *m_doc,
+                                                      yyjson_mut_val *m_vals) {
+    /*
+     The mutable object or array stores all sub-values in a circular linked
+     list, so we can traverse them in the same loop. The traversal starts from
+     the last item, continues with the first item in a list, and ends with the
+     second to last item, which needs to be linked to the last item to close the
+     circle.
+     */
+    yyjson_mut_val *m_val = unsafe_yyjson_mut_val(m_doc, 1);
+    if (unlikely(!m_val)) return NULL;
+    m_val->tag = m_vals->tag;
+    
+    switch (unsafe_yyjson_get_type(m_vals)) {
+        case YYJSON_TYPE_OBJ:
+        case YYJSON_TYPE_ARR:
+            if (unsafe_yyjson_get_len(m_vals) > 0) {
+                yyjson_mut_val *last = (yyjson_mut_val *)m_vals->uni.ptr;
+                yyjson_mut_val *next = last->next, *prev;
+                prev = unsafe_yyjson_mut_val_mut_copy(m_doc, last);
+                if (!prev) return NULL;
+                m_val->uni.ptr = (void *)prev;
+                while (next != last) {
+                    prev->next = unsafe_yyjson_mut_val_mut_copy(m_doc, next);
+                    if (!prev->next) return NULL;
+                    prev = prev->next;
+                    next = next->next;
+                }
+                prev->next = (yyjson_mut_val *)m_val->uni.ptr;
+            }
+            break;
+        
+        case YYJSON_TYPE_RAW:
+        case YYJSON_TYPE_STR: {
+            const char *str = m_vals->uni.str;
+            usize str_len = unsafe_yyjson_get_len(m_vals);
+            m_val->uni.str = unsafe_yyjson_mut_strncpy(m_doc, str, str_len);
+            if (!m_val->uni.str) return NULL;
+            break;
+        }
+        
+        default:
+            m_val->uni = m_vals->uni;
+            break;
+    }
+    
+    return m_val;
+}
+
+yyjson_mut_val *yyjson_mut_val_mut_copy(yyjson_mut_doc *doc,
+                                        yyjson_mut_val *val) {
+    if (doc && val) return unsafe_yyjson_mut_val_mut_copy(doc, val);
+    return NULL;
+}
+
+/* Count the number of values and the total length of the strings. */
+static void yyjson_mut_stat(yyjson_mut_val *val,
+                            usize *val_sum, usize *str_sum) {
+    yyjson_type type = unsafe_yyjson_get_type(val);
+    *val_sum += 1;
+    if (type == YYJSON_TYPE_ARR || type == YYJSON_TYPE_OBJ) {
+        yyjson_mut_val *child = (yyjson_mut_val *)val->uni.ptr;
+        usize len = unsafe_yyjson_get_len(val), i;
+        len <<= (u8)(type == YYJSON_TYPE_OBJ);
+        *val_sum += len;
+        for (i = 0; i < len; i++) {
+            yyjson_type stype = unsafe_yyjson_get_type(child);
+            if (stype == YYJSON_TYPE_STR || stype == YYJSON_TYPE_RAW) {
+                *str_sum += unsafe_yyjson_get_len(child) + 1;
+            } else if (stype == YYJSON_TYPE_ARR || stype == YYJSON_TYPE_OBJ) {
+                yyjson_mut_stat(child, val_sum, str_sum);
+                *val_sum -= 1;
+            }
+            child = child->next;
+        }
+    } else if (type == YYJSON_TYPE_STR || type == YYJSON_TYPE_RAW) {
+        *str_sum += unsafe_yyjson_get_len(val) + 1;
+    }
+}
+
+/* Copy mutable values to immutable value pool. */
+static usize yyjson_imut_copy(yyjson_val **val_ptr, char **buf_ptr,
+                              yyjson_mut_val *mval) {
+    yyjson_val *val = *val_ptr;
+    yyjson_type type = unsafe_yyjson_get_type(mval);
+    if (type == YYJSON_TYPE_ARR || type == YYJSON_TYPE_OBJ) {
+        yyjson_mut_val *child = (yyjson_mut_val *)mval->uni.ptr;
+        usize len = unsafe_yyjson_get_len(mval), i;
+        usize val_sum = 1;
+        if (type == YYJSON_TYPE_OBJ) {
+            if (len) child = child->next->next;
+            len <<= 1;
+        } else {
+            if (len) child = child->next;
+        }
+        *val_ptr = val + 1;
+        for (i = 0; i < len; i++) {
+            val_sum += yyjson_imut_copy(val_ptr, buf_ptr, child);
+            child = child->next;
+        }
+        val->tag = mval->tag;
+        val->uni.ofs = val_sum * sizeof(yyjson_val);
+        return val_sum;
+    } else if (type == YYJSON_TYPE_STR || type == YYJSON_TYPE_RAW) {
+        char *buf = *buf_ptr;
+        usize len = unsafe_yyjson_get_len(mval);
+        memcpy((void *)buf, (const void *)mval->uni.str, len);
+        buf[len] = '\0';
+        val->tag = mval->tag;
+        val->uni.str = buf;
+        *val_ptr = val + 1;
+        *buf_ptr = buf + len + 1;
+        return 1;
+    } else {
+        val->tag = mval->tag;
+        val->uni = mval->uni;
+        *val_ptr = val + 1;
+        return 1;
+    }
+}
+
+yyjson_doc *yyjson_mut_doc_imut_copy(yyjson_mut_doc *mdoc,
+                                     const yyjson_alc *alc) {
+    if (!mdoc) return NULL;
+    return yyjson_mut_val_imut_copy(mdoc->root, alc);
+}
+
+yyjson_doc *yyjson_mut_val_imut_copy(yyjson_mut_val *mval,
+                                     const yyjson_alc *alc) {
+    usize val_num = 0, str_sum = 0, hdr_size, buf_size;
+    yyjson_doc *doc = NULL;
+    yyjson_val *val_hdr = NULL;
+    
+    /* This value should be NULL here. Setting a non-null value suppresses
+       warning from the clang analyzer. */
+    char *str_hdr = (char *)(void *)&str_sum;
+    if (!mval) return NULL;
+    if (!alc) alc = &YYJSON_DEFAULT_ALC;
+    
+    /* traverse the input value to get pool size */
+    yyjson_mut_stat(mval, &val_num, &str_sum);
+    
+    /* create doc and val pool */
+    hdr_size = size_align_up(sizeof(yyjson_doc), sizeof(yyjson_val));
+    buf_size = hdr_size + val_num * sizeof(yyjson_val);
+    doc = (yyjson_doc *)alc->malloc(alc->ctx, buf_size);
+    if (!doc) return NULL;
+    memset(doc, 0, sizeof(yyjson_doc));
+    val_hdr = (yyjson_val *)(void *)((char *)(void *)doc + hdr_size);
+    doc->root = val_hdr;
+    doc->alc = *alc;
+    
+    /* create str pool */
+    if (str_sum > 0) {
+        str_hdr = (char *)alc->malloc(alc->ctx, str_sum);
+        doc->str_pool = str_hdr;
+        if (!str_hdr) {
+            alc->free(alc->ctx, (void *)doc);
+            return NULL;
+        }
+    }
+    
+    /* copy vals and strs */
+    doc->val_read = yyjson_imut_copy(&val_hdr, &str_hdr, mval);
+    doc->dat_read = str_sum + 1;
+    return doc;
+}
+
+static_inline bool unsafe_yyjson_num_equals(void *lhs, void *rhs) {
+    yyjson_val_uni *luni = &((yyjson_val *)lhs)->uni;
+    yyjson_val_uni *runi = &((yyjson_val *)rhs)->uni;
+    yyjson_subtype lt = unsafe_yyjson_get_subtype(lhs);
+    yyjson_subtype rt = unsafe_yyjson_get_subtype(rhs);
+    if (lt == rt) return luni->u64 == runi->u64;
+    if (lt == YYJSON_SUBTYPE_SINT && rt == YYJSON_SUBTYPE_UINT) {
+        return luni->i64 >= 0 && luni->u64 == runi->u64;
+    }
+    if (lt == YYJSON_SUBTYPE_UINT && rt == YYJSON_SUBTYPE_SINT) {
+        return runi->i64 >= 0 && luni->u64 == runi->u64;
+    }
+    return false;
+}
+
+static_inline bool unsafe_yyjson_str_equals(void *lhs, void *rhs) {
+    usize len = unsafe_yyjson_get_len(lhs);
+    if (len != unsafe_yyjson_get_len(rhs)) return false;
+    return !memcmp(unsafe_yyjson_get_str(lhs),
+                   unsafe_yyjson_get_str(rhs), len);
+}
+
+bool unsafe_yyjson_equals(yyjson_val *lhs, yyjson_val *rhs) {
+    yyjson_type type = unsafe_yyjson_get_type(lhs);
+    if (type != unsafe_yyjson_get_type(rhs)) return false;
+    
+    switch (type) {
+        case YYJSON_TYPE_OBJ: {
+            usize len = unsafe_yyjson_get_len(lhs);
+            if (len != unsafe_yyjson_get_len(rhs)) return false;
+            if (len > 0) {
+                yyjson_obj_iter iter;
+                yyjson_obj_iter_init(rhs, &iter);
+                lhs = unsafe_yyjson_get_first(lhs);
+                while (len-- > 0) {
+                    rhs = yyjson_obj_iter_getn(&iter, lhs->uni.str,
+                                               unsafe_yyjson_get_len(lhs));
+                    if (!rhs) return false;
+                    if (!unsafe_yyjson_equals(lhs + 1, rhs)) return false;
+                    lhs = unsafe_yyjson_get_next(lhs + 1);
+                }
+            }
+            /* yyjson allows duplicate keys, so the check may be inaccurate */
+            return true;
+        }
+        
+        case YYJSON_TYPE_ARR: {
+            usize len = unsafe_yyjson_get_len(lhs);
+            if (len != unsafe_yyjson_get_len(rhs)) return false;
+            if (len > 0) {
+                lhs = unsafe_yyjson_get_first(lhs);
+                rhs = unsafe_yyjson_get_first(rhs);
+                while (len-- > 0) {
+                    if (!unsafe_yyjson_equals(lhs, rhs)) return false;
+                    lhs = unsafe_yyjson_get_next(lhs);
+                    rhs = unsafe_yyjson_get_next(rhs);
+                }
+            }
+            return true;
+        }
+        
+        case YYJSON_TYPE_NUM:
+            return unsafe_yyjson_num_equals(lhs, rhs);
+        
+        case YYJSON_TYPE_RAW:
+        case YYJSON_TYPE_STR:
+            return unsafe_yyjson_str_equals(lhs, rhs);
+        
+        case YYJSON_TYPE_NULL:
+        case YYJSON_TYPE_BOOL:
+            return lhs->tag == rhs->tag;
+        
+        default:
+            return false;
+    }
+}
+
+bool unsafe_yyjson_mut_equals(yyjson_mut_val *lhs, yyjson_mut_val *rhs) {
+    yyjson_type type = unsafe_yyjson_get_type(lhs);
+    if (type != unsafe_yyjson_get_type(rhs)) return false;
+    
+    switch (type) {
+        case YYJSON_TYPE_OBJ: {
+            usize len = unsafe_yyjson_get_len(lhs);
+            if (len != unsafe_yyjson_get_len(rhs)) return false;
+            if (len > 0) {
+                yyjson_mut_obj_iter iter;
+                yyjson_mut_obj_iter_init(rhs, &iter);
+                lhs = (yyjson_mut_val *)lhs->uni.ptr;
+                while (len-- > 0) {
+                    rhs = yyjson_mut_obj_iter_getn(&iter, lhs->uni.str,
+                                                   unsafe_yyjson_get_len(lhs));
+                    if (!rhs) return false;
+                    if (!unsafe_yyjson_mut_equals(lhs->next, rhs)) return false;
+                    lhs = lhs->next->next;
+                }
+            }
+            /* yyjson allows duplicate keys, so the check may be inaccurate */
+            return true;
+        }
+        
+        case YYJSON_TYPE_ARR: {
+            usize len = unsafe_yyjson_get_len(lhs);
+            if (len != unsafe_yyjson_get_len(rhs)) return false;
+            if (len > 0) {
+                lhs = (yyjson_mut_val *)lhs->uni.ptr;
+                rhs = (yyjson_mut_val *)rhs->uni.ptr;
+                while (len-- > 0) {
+                    if (!unsafe_yyjson_mut_equals(lhs, rhs)) return false;
+                    lhs = lhs->next;
+                    rhs = rhs->next;
+                }
+            }
+            return true;
+        }
+        
+        case YYJSON_TYPE_NUM:
+            return unsafe_yyjson_num_equals(lhs, rhs);
+        
+        case YYJSON_TYPE_RAW:
+        case YYJSON_TYPE_STR:
+            return unsafe_yyjson_str_equals(lhs, rhs);
+        
+        case YYJSON_TYPE_NULL:
+        case YYJSON_TYPE_BOOL:
+            return lhs->tag == rhs->tag;
+        
+        default:
+            return false;
+    }
+}
+
+
+
+/*==============================================================================
+ * JSON Reader Begin
+ *============================================================================*/
 
 #if !YYJSON_DISABLE_READER
 
+#define has_read_flag(_flag) unlikely(read_flag_eq(flg, YYJSON_READ_##_flag))
+
+static_inline bool read_flag_eq(yyjson_read_flag flg, yyjson_read_flag chk) {
+#if YYJSON_DISABLE_NON_STANDARD
+    if (chk == YYJSON_READ_ALLOW_INF_AND_NAN ||
+        chk == YYJSON_READ_ALLOW_COMMENTS ||
+        chk == YYJSON_READ_ALLOW_TRAILING_COMMAS ||
+        chk == YYJSON_READ_ALLOW_INVALID_UNICODE)
+        return false; /* this should be evaluated at compile-time */
+#endif
+    return (flg & chk) != 0;
+}
+
+
+
 /*==============================================================================
- * Hex Character Reader
+ * Hex Character Reader (Private)
  * This function is used by JSON reader to read escaped characters.
  *============================================================================*/
 
@@ -3747,7 +2822,7 @@ static_inline bool read_hex_u16(const u8 *cur, u16 *val) {
 
 
 /*==============================================================================
- * JSON Reader Utils
+ * JSON Reader Utils (Private)
  * These functions are used by JSON reader to read literals and comments.
  *============================================================================*/
 
@@ -4082,32 +3157,15 @@ static_noinline bool is_truncated_end(u8 *hdr, u8 *cur, u8 *end,
 
 
 
-#if YYJSON_HAS_IEEE_754 && !YYJSON_DISABLE_FAST_FP_CONV /* FP_READER */
+#if !YYJSON_DISABLE_FAST_FP_CONV
 
 /*==============================================================================
- * BigInt For Floating Point Number Reader
+ * BigInt For Floating Point Number Reader (Private)
  *
- * The bigint algorithm is used by floating-point number reader to get correctly
- * rounded result for numbers with lots of digits. This part of code is rarely
- * used for common numbers.
+ * The bigint algorithm is used by IEEE-754 floating-point number reader to get
+ * correctly rounded result for numbers with lots of digits. This part of code
+ * is rarely used for common numbers.
  *============================================================================*/
-
-/** Maximum exponent of exact pow10 */
-#define U64_POW10_MAX_EXP 19
-
-/** Table: [ 10^0, ..., 10^19 ] (generate with misc/make_tables.c) */
-static const u64 u64_pow10_table[U64_POW10_MAX_EXP + 1] = {
-    U64(0x00000000, 0x00000001), U64(0x00000000, 0x0000000A),
-    U64(0x00000000, 0x00000064), U64(0x00000000, 0x000003E8),
-    U64(0x00000000, 0x00002710), U64(0x00000000, 0x000186A0),
-    U64(0x00000000, 0x000F4240), U64(0x00000000, 0x00989680),
-    U64(0x00000000, 0x05F5E100), U64(0x00000000, 0x3B9ACA00),
-    U64(0x00000002, 0x540BE400), U64(0x00000017, 0x4876E800),
-    U64(0x000000E8, 0xD4A51000), U64(0x00000918, 0x4E72A000),
-    U64(0x00005AF3, 0x107A4000), U64(0x00038D7E, 0xA4C68000),
-    U64(0x002386F2, 0x6FC10000), U64(0x01634578, 0x5D8A0000),
-    U64(0x0DE0B6B3, 0xA7640000), U64(0x8AC72304, 0x89E80000)
-};
 
 /** Maximum numbers of chunks used by a bigint (58 is enough here). */
 #define BIGINT_MAX_CHUNKS 64
@@ -4282,7 +3340,10 @@ static_noinline void bigint_set_buf(bigint *big, u64 sig, i32 *exp,
 
 
 /*==============================================================================
- * Diy Floating Point
+ * Diy Floating Point (Private)
+ *
+ * The diyfp algorithm is used by IEEE-754 floating-point number reader to get
+ * correctly rounded result.
  *============================================================================*/
 
 /** "Do It Yourself Floating Point" struct. */
@@ -4971,11 +4032,11 @@ digi_finish:
 
 
 
-#else /* FP_READER */
+#else /* !YYJSON_DISABLE_FAST_FP_CONV */
 
 /**
  Read a JSON number.
- This is a fallback function if the custom number reader is disabled.
+ This is the fallback function when `FAST_FP_CONV` is disabled.
  This function use libc's strtod() to read floating-point number.
  */
 static_inline bool read_number(u8 **ptr,
@@ -5166,7 +4227,7 @@ read_double:
 #undef return_raw
 }
 
-#endif /* FP_READER */
+#endif /* !YYJSON_DISABLE_FAST_FP_CONV */
 
 
 
@@ -6925,11 +5986,35 @@ const char *yyjson_read_number(const char *dat,
 #undef return_err
 }
 
-#endif /* YYJSON_DISABLE_READER */
 
 
+/*==============================================================================
+ * JSON Reader End
+ *============================================================================*/
+
+#undef has_flag
+#endif /* !YYJSON_DISABLE_READER */
+
+
+
+/*==============================================================================
+ * JSON Writer Begin
+ *============================================================================*/
 
 #if !YYJSON_DISABLE_WRITER
+
+#define has_write_flag(_flag) unlikely(write_flag_eq(flg, YYJSON_WRITE_##_flag))
+
+static_inline bool write_flag_eq(yyjson_write_flag flg, yyjson_write_flag chk) {
+#if YYJSON_DISABLE_NON_STANDARD
+    if (chk == YYJSON_WRITE_ALLOW_INF_AND_NAN ||
+        chk == YYJSON_WRITE_ALLOW_INVALID_UNICODE)
+        return false; /* this should be evaluated at compile-time */
+#endif
+    return (flg & chk) != 0;
+}
+
+
 
 /*==============================================================================
  * Integer Writer
@@ -7109,7 +6194,7 @@ static_inline u8 *write_u64(u64 val, u8 *buf) {
  * Number Writer
  *============================================================================*/
 
-#if YYJSON_HAS_IEEE_754 && !YYJSON_DISABLE_FAST_FP_CONV  /* FP_WRITER */
+#if !YYJSON_DISABLE_FAST_FP_CONV
 
 /** Trailing zero count table for number 0 to 99.
     (generate with misc/make_tables.c) */
@@ -7379,8 +6464,7 @@ static_inline u8 *write_f64_raw(u8 *buf, u64 raw, yyjson_write_flag flg) {
         if (has_write_flag(INF_AND_NAN_AS_NULL)) {
             byte_copy_4(buf, "null");
             return buf + 4;
-        }
-        else if (has_write_flag(ALLOW_INF_AND_NAN)) {
+        } else if (has_write_flag(ALLOW_INF_AND_NAN)) {
             if (sig_raw == 0) {
                 buf[0] = '-';
                 buf += sign;
@@ -7508,9 +6592,13 @@ static_inline u8 *write_f64_raw(u8 *buf, u64 raw, yyjson_write_flag flg) {
     }
 }
 
-#else /* FP_WRITER */
+#else /* !YYJSON_DISABLE_FAST_FP_CONV */
 
-/** Write a double number (requires 32 bytes buffer). */
+/**
+ Write a double number (requires 32 bytes buffer).
+ This is the fallback function when `FAST_FP_CONV` is disabled.
+ This function use libc's sprintf() to write floating-point number.
+ */
 static_inline u8 *write_f64_raw(u8 *buf, u64 raw, yyjson_write_flag flg) {
     /*
      For IEEE 754, `DBL_DECIMAL_DIG` is 17 for round-trip.
@@ -7546,8 +6634,7 @@ static_inline u8 *write_f64_raw(u8 *buf, u64 raw, yyjson_write_flag flg) {
         if (has_write_flag(INF_AND_NAN_AS_NULL)) {
             byte_copy_4(buf, "null");
             return buf + 4;
-        }
-        else if (has_write_flag(ALLOW_INF_AND_NAN)) {
+        } else if (has_write_flag(ALLOW_INF_AND_NAN)) {
             if (*cur == 'i') {
                 byte_copy_8(cur, "Infinity");
                 cur += 8;
@@ -7574,7 +6661,7 @@ static_inline u8 *write_f64_raw(u8 *buf, u64 raw, yyjson_write_flag flg) {
     return buf + len;
 }
 
-#endif /* FP_WRITER */
+#endif /* !YYJSON_DISABLE_FAST_FP_CONV */
 
 /** Write a JSON number (requires 32 bytes buffer). */
 static_inline u8 *write_number(u8 *cur, yyjson_val *val,
@@ -8185,7 +7272,7 @@ err_esc:
 
 
 /*==============================================================================
- * Writer Utilities
+ * Writer Utils
  *============================================================================*/
 
 /** Write null (requires 8 bytes buffer). */
@@ -9470,4 +8557,956 @@ bool yyjson_mut_write_fp(FILE *fp,
     return yyjson_mut_val_write_fp(fp, root, flg, alc_ptr, err);
 }
 
-#endif /* YYJSON_DISABLE_WRITER */
+
+
+/*==============================================================================
+ * JSON Writer End
+ *============================================================================*/
+
+#undef has_flag
+#endif /* !YYJSON_DISABLE_WRITER */
+
+
+
+/*==============================================================================
+ * JSON Pointer API
+ *
+ * These functions implement the JSON Pointer specification (RFC 6901).
+ * These functions are independent of the JSON reader and writer.
+ *============================================================================*/
+
+#if !YYJSON_DISABLE_UTILS
+
+#define return_err(_ret, _code, _pos, _msg) do { \
+    if (err) { \
+        err->code = YYJSON_PTR_ERR_##_code; \
+        err->msg = _msg; \
+        err->pos = (usize)(_pos); \
+    } \
+    return _ret; \
+} while (false)
+
+#define return_err_resolve(_ret, _pos) \
+    return_err(_ret, RESOLVE, _pos, "JSON pointer cannot be resolved")
+#define return_err_syntax(_ret, _pos) \
+    return_err(_ret, SYNTAX, _pos, "invalid escaped character")
+#define return_err_alloc(_ret) \
+    return_err(_ret, MEMORY_ALLOCATION, 0, "failed to create value")
+
+/**
+ Get a token from JSON pointer string.
+ @param ptr [in,out]
+                in:  string that points to current token prefix `/`
+                out: string that points to next token prefix `/`, or string end
+ @param end [in] end of the entire JSON Pointer string
+ @param len [out] unescaped token length
+ @param esc [out] number of escaped characters in this token
+ @return head of the token, or NULL if syntax error
+ */
+static_inline const char *ptr_next_token(const char **ptr, const char *end,
+                                         usize *len, usize *esc) {
+    const char *hdr = *ptr + 1;
+    const char *cur = hdr;
+    /* skip unescaped characters */
+    while (cur < end && *cur != '/' && *cur != '~') cur++;
+    if (likely(cur == end || *cur != '~')) {
+        /* no escaped characters, return */
+        *ptr = cur;
+        *len = (usize)(cur - hdr);
+        *esc = 0;
+        return hdr;
+    } else {
+        /* handle escaped characters */
+        usize esc_num = 0;
+        while (cur < end && *cur != '/') {
+            if (*cur++ == '~') {
+                if (cur == end || (*cur != '0' && *cur != '1')) {
+                    *ptr = cur - 1;
+                    return NULL;
+                }
+                esc_num++;
+            }
+        }
+        *ptr = cur;
+        *len = (usize)(cur - hdr) - esc_num;
+        *esc = esc_num;
+        return hdr;
+    }
+}
+
+/**
+ Convert token string to index.
+ @param cur [in]  token head
+ @param len [in]  token length
+ @param idx [out] the index number, or USIZE_MAX if token is '-'
+ @return true if token is a valid array index
+ */
+static_inline bool ptr_token_to_idx(const char *cur, usize len, usize *idx) {
+    const char *end = cur + len;
+    usize num = 0, add;
+    if (unlikely(len == 0 || len > USIZE_SAFE_DIG)) return false;
+    if (*cur == '0') {
+        if (unlikely(len > 1)) return false;
+        *idx = 0;
+        return true;
+    }
+    if (*cur == '-') {
+        if (unlikely(len > 1)) return false;
+        *idx = USIZE_MAX;
+        return true;
+    }
+    for (; cur < end && (add = (usize)((u8)*cur - (u8)'0')) <= 9; cur++) {
+        num = num * 10 + add;
+    }
+    if (unlikely(num == 0 || cur < end)) return false;
+    *idx = num;
+    return true;
+}
+
+/**
+ Compare JSON key with token.
+ @param key a string key (yyjson_val or yyjson_mut_val)
+ @param token a JSON pointer token
+ @param len unescaped token length
+ @param esc number of escaped characters in this token
+ @return true if `str` is equals to `token`
+ */
+static_inline bool ptr_token_eq(void *key,
+                                const char *token, usize len, usize esc) {
+    yyjson_val *val = (yyjson_val *)key;
+    if (unsafe_yyjson_get_len(val) != len) return false;
+    if (likely(!esc)) {
+        return memcmp(val->uni.str, token, len) == 0;
+    } else {
+        const char *str = val->uni.str;
+        for (; len-- > 0; token++, str++) {
+            if (*token == '~') {
+                if (*str != (*++token == '0' ? '~' : '/')) return false;
+            } else {
+                if (*str != *token) return false;
+            }
+        }
+        return true;
+    }
+}
+
+/**
+ Get a value from array by token.
+ @param arr   an array, should not be NULL or non-array type
+ @param token a JSON pointer token
+ @param len   unescaped token length
+ @param esc   number of escaped characters in this token
+ @return value at index, or NULL if token is not index or index is out of range
+ */
+static_inline yyjson_val *ptr_arr_get(yyjson_val *arr, const char *token,
+                                      usize len, usize esc) {
+    yyjson_val *val = unsafe_yyjson_get_first(arr);
+    usize num = unsafe_yyjson_get_len(arr), idx = 0;
+    if (unlikely(num == 0)) return NULL;
+    if (unlikely(!ptr_token_to_idx(token, len, &idx))) return NULL;
+    if (unlikely(idx >= num)) return NULL;
+    if (unsafe_yyjson_arr_is_flat(arr)) {
+        return val + idx;
+    } else {
+        while (idx-- > 0) val = unsafe_yyjson_get_next(val);
+        return val;
+    }
+}
+
+/**
+ Get a value from object by token.
+ @param obj   [in] an object, should not be NULL or non-object type
+ @param token [in] a JSON pointer token
+ @param len   [in] unescaped token length
+ @param esc   [in] number of escaped characters in this token
+ @return value associated with the token, or NULL if no value
+ */
+static_inline yyjson_val *ptr_obj_get(yyjson_val *obj, const char *token,
+                                      usize len, usize esc) {
+    yyjson_val *key = unsafe_yyjson_get_first(obj);
+    usize num = unsafe_yyjson_get_len(obj);
+    if (unlikely(num == 0)) return NULL;
+    for (; num > 0; num--, key = unsafe_yyjson_get_next(key + 1)) {
+        if (ptr_token_eq(key, token, len, esc)) return key + 1;
+    }
+    return NULL;
+}
+
+/**
+ Get a value from array by token.
+ @param arr   [in] an array, should not be NULL or non-array type
+ @param token [in] a JSON pointer token
+ @param len   [in] unescaped token length
+ @param esc   [in] number of escaped characters in this token
+ @param pre   [out] previous (sibling) value of the returned value
+ @param last  [out] whether index is last
+ @return value at index, or NULL if token is not index or index is out of range
+ */
+static_inline yyjson_mut_val *ptr_mut_arr_get(yyjson_mut_val *arr,
+                                              const char *token,
+                                              usize len, usize esc,
+                                              yyjson_mut_val **pre,
+                                              bool *last) {
+    yyjson_mut_val *val = (yyjson_mut_val *)arr->uni.ptr; /* last (tail) */
+    usize num = unsafe_yyjson_get_len(arr), idx;
+    if (last) *last = false;
+    if (pre) *pre = NULL;
+    if (unlikely(num == 0)) {
+        if (last && len == 1 && (*token == '0' || *token == '-')) *last = true;
+        return NULL;
+    }
+    if (unlikely(!ptr_token_to_idx(token, len, &idx))) return NULL;
+    if (last) *last = (idx == num || idx == USIZE_MAX);
+    if (unlikely(idx >= num)) return NULL;
+    while (idx-- > 0) val = val->next;
+    *pre = val;
+    return val->next;
+}
+
+/**
+ Get a value from object by token.
+ @param obj   [in] an object, should not be NULL or non-object type
+ @param token [in] a JSON pointer token
+ @param len   [in] unescaped token length
+ @param esc   [in] number of escaped characters in this token
+ @param pre   [out] previous (sibling) key of the returned value's key
+ @return value associated with the token, or NULL if no value
+ */
+static_inline yyjson_mut_val *ptr_mut_obj_get(yyjson_mut_val *obj,
+                                              const char *token,
+                                              usize len, usize esc,
+                                              yyjson_mut_val **pre) {
+    yyjson_mut_val *pre_key = (yyjson_mut_val *)obj->uni.ptr, *key;
+    usize num = unsafe_yyjson_get_len(obj);
+    if (pre) *pre = NULL;
+    if (unlikely(num == 0)) return NULL;
+    for (; num > 0; num--, pre_key = key) {
+        key = pre_key->next->next;
+        if (ptr_token_eq(key, token, len, esc)) {
+            *pre = pre_key;
+            return key->next;
+        }
+    }
+    return NULL;
+}
+
+/**
+ Create a string value with JSON pointer token.
+ @param token [in] a JSON pointer token
+ @param len   [in] unescaped token length
+ @param esc   [in] number of escaped characters in this token
+ @param doc   [in] used for memory allocation when creating value
+ @return new string value, or NULL if memory allocation failed
+ */
+static_inline yyjson_mut_val *ptr_new_key(const char *token,
+                                          usize len, usize esc,
+                                          yyjson_mut_doc *doc) {
+    const char *src = token;
+    if (likely(!esc)) {
+        return yyjson_mut_strncpy(doc, src, len);
+    } else {
+        const char *end = src + len + esc;
+        char *dst = unsafe_yyjson_mut_str_alc(doc, len + esc);
+        char *str = dst;
+        if (unlikely(!dst)) return NULL;
+        for (; src < end; src++, dst++) {
+            if (*src != '~') *dst = *src;
+            else *dst = (*++src == '0' ? '~' : '/');
+        }
+        *dst = '\0';
+        return yyjson_mut_strn(doc, str, len);
+    }
+}
+
+yyjson_val *unsafe_yyjson_ptr_getx(yyjson_val *val,
+                                   const char *ptr, size_t ptr_len,
+                                   yyjson_ptr_err *err) {
+    
+    const char *hdr = ptr, *end = ptr + ptr_len, *token;
+    usize len, esc;
+    yyjson_type type;
+    
+    while (true) {
+        token = ptr_next_token(&ptr, end, &len, &esc);
+        if (unlikely(!token)) return_err_syntax(NULL, ptr - hdr);
+        type = unsafe_yyjson_get_type(val);
+        if (type == YYJSON_TYPE_OBJ) {
+            val = ptr_obj_get(val, token, len, esc);
+        } else if (type == YYJSON_TYPE_ARR) {
+            val = ptr_arr_get(val, token, len, esc);
+        } else {
+            val = NULL;
+        }
+        if (!val) return_err_resolve(NULL, token - hdr);
+        if (ptr == end) return val;
+    }
+}
+
+yyjson_mut_val *unsafe_yyjson_mut_ptr_getx(yyjson_mut_val *val,
+                                           const char *ptr,
+                                           size_t ptr_len,
+                                           yyjson_ptr_ctx *ctx,
+                                           yyjson_ptr_err *err) {
+    
+    const char *hdr = ptr, *end = ptr + ptr_len, *token;
+    usize len, esc;
+    yyjson_mut_val *ctn, *pre = NULL;
+    yyjson_type type;
+    bool idx_is_last = false;
+    
+    while (true) {
+        token = ptr_next_token(&ptr, end, &len, &esc);
+        if (unlikely(!token)) return_err_syntax(NULL, ptr - hdr);
+        ctn = val;
+        type = unsafe_yyjson_get_type(val);
+        if (type == YYJSON_TYPE_OBJ) {
+            val = ptr_mut_obj_get(val, token, len, esc, &pre);
+        } else if (type == YYJSON_TYPE_ARR) {
+            val = ptr_mut_arr_get(val, token, len, esc, &pre, &idx_is_last);
+        } else {
+            val = NULL;
+        }
+        if (ctx && (ptr == end)) {
+            if (type == YYJSON_TYPE_OBJ ||
+                (type == YYJSON_TYPE_ARR && (val || idx_is_last))) {
+                ctx->ctn = ctn;
+                ctx->pre = pre;
+            }
+        }
+        if (!val) return_err_resolve(NULL, token - hdr);
+        if (ptr == end) return val;
+    }
+}
+
+bool unsafe_yyjson_mut_ptr_putx(yyjson_mut_val *val,
+                                const char *ptr, size_t ptr_len,
+                                yyjson_mut_val *new_val,
+                                yyjson_mut_doc *doc,
+                                bool create_parent, bool insert_new,
+                                yyjson_ptr_ctx *ctx,
+                                yyjson_ptr_err *err) {
+    
+    const char *hdr = ptr, *end = ptr + ptr_len, *token;
+    usize token_len, esc, ctn_len;
+    yyjson_mut_val *ctn, *key, *pre = NULL;
+    yyjson_mut_val *sep_ctn = NULL, *sep_key = NULL, *sep_val = NULL;
+    yyjson_type ctn_type;
+    bool idx_is_last = false;
+    
+    /* skip exist parent nodes */
+    while (true) {
+        token = ptr_next_token(&ptr, end, &token_len, &esc);
+        if (unlikely(!token)) return_err_syntax(false, ptr - hdr);
+        ctn = val;
+        ctn_type = unsafe_yyjson_get_type(ctn);
+        if (ctn_type == YYJSON_TYPE_OBJ) {
+            val = ptr_mut_obj_get(ctn, token, token_len, esc, &pre);
+        } else if (ctn_type == YYJSON_TYPE_ARR) {
+            val = ptr_mut_arr_get(ctn, token, token_len, esc, &pre,
+                                  &idx_is_last);
+        } else return_err_resolve(false, token - hdr);
+        if (!val) break;
+        if (ptr == end) break; /* is last token */
+    }
+    
+    /* create parent nodes if not exist */
+    if (unlikely(ptr != end)) { /* not last token */
+        if (!create_parent) return_err_resolve(false, token - hdr);
+        
+        /* add value at last index if container is array */
+        if (ctn_type == YYJSON_TYPE_ARR) {
+            if (!idx_is_last || !insert_new) {
+                return_err_resolve(false, token - hdr);
+            }
+            val = yyjson_mut_obj(doc);
+            if (!val) return_err_alloc(false);
+            
+            /* delay attaching until all operations are completed */
+            sep_ctn = ctn;
+            sep_key = NULL;
+            sep_val = val;
+            
+            /* move to next token */
+            ctn = val;
+            val = NULL;
+            ctn_type = YYJSON_TYPE_OBJ;
+            token = ptr_next_token(&ptr, end, &token_len, &esc);
+            if (unlikely(!token)) return_err_resolve(false, token - hdr);
+        }
+        
+        /* container is object, create parent nodes */
+        while (ptr != end) { /* not last token */
+            key = ptr_new_key(token, token_len, esc, doc);
+            if (!key) return_err_alloc(false);
+            val = yyjson_mut_obj(doc);
+            if (!val) return_err_alloc(false);
+            
+            /* delay attaching until all operations are completed */
+            if (!sep_ctn) {
+                sep_ctn = ctn;
+                sep_key = key;
+                sep_val = val;
+            } else {
+                yyjson_mut_obj_add(ctn, key, val);
+            }
+            
+            /* move to next token */
+            ctn = val;
+            val = NULL;
+            token = ptr_next_token(&ptr, end, &token_len, &esc);
+            if (unlikely(!token)) return_err_syntax(false, ptr - hdr);
+        }
+    }
+    
+    /* JSON pointer is resolved, insert or replace target value */
+    ctn_len = unsafe_yyjson_get_len(ctn);
+    if (ctn_type == YYJSON_TYPE_OBJ) {
+        if (ctx) ctx->ctn = ctn;
+        if (!val || insert_new) {
+            /* insert new key-value pair */
+            key = ptr_new_key(token, token_len, esc, doc);
+            if (unlikely(!key)) return_err_alloc(false);
+            if (ctx) ctx->pre = ctn_len ? (yyjson_mut_val *)ctn->uni.ptr : key;
+            unsafe_yyjson_mut_obj_add(ctn, key, new_val, ctn_len);
+        } else {
+            /* replace exist value */
+            key = pre->next->next;
+            if (ctx) ctx->pre = pre;
+            if (ctx) ctx->old = val;
+            yyjson_mut_obj_put(ctn, key, new_val);
+        }
+    } else {
+        /* array */
+        if (ctx && (val || idx_is_last)) ctx->ctn = ctn;
+        if (insert_new) {
+            /* append new value */
+            if (val) {
+                pre->next = new_val;
+                new_val->next = val;
+                if (ctx) ctx->pre = pre;
+                unsafe_yyjson_set_len(ctn, ctn_len + 1);
+            } else if (idx_is_last) {
+                if (ctx) ctx->pre = ctn_len ?
+                    (yyjson_mut_val *)ctn->uni.ptr : new_val;
+                yyjson_mut_arr_append(ctn, new_val);
+            } else {
+                return_err_resolve(false, token - hdr);
+            }
+        } else {
+            /* replace exist value */
+            if (!val) return_err_resolve(false, token - hdr);
+            if (ctn_len > 1) {
+                new_val->next = val->next;
+                pre->next = new_val;
+                if (ctn->uni.ptr == val) ctn->uni.ptr = new_val;
+            } else {
+                new_val->next = new_val;
+                ctn->uni.ptr = new_val;
+                pre = new_val;
+            }
+            if (ctx) ctx->pre = pre;
+            if (ctx) ctx->old = val;
+        }
+    }
+    
+    /* all operations are completed, attach the new components to the target */
+    if (unlikely(sep_ctn)) {
+        if (sep_key) yyjson_mut_obj_add(sep_ctn, sep_key, sep_val);
+        else yyjson_mut_arr_append(sep_ctn, sep_val);
+    }
+    return true;
+}
+
+yyjson_mut_val *unsafe_yyjson_mut_ptr_replacex(
+    yyjson_mut_val *val, const char *ptr, size_t len, yyjson_mut_val *new_val,
+    yyjson_ptr_ctx *ctx, yyjson_ptr_err *err) {
+    
+    yyjson_mut_val *cur_val;
+    yyjson_ptr_ctx cur_ctx;
+    memset(&cur_ctx, 0, sizeof(cur_ctx));
+    if (!ctx) ctx = &cur_ctx;
+    cur_val = unsafe_yyjson_mut_ptr_getx(val, ptr, len, ctx, err);
+    if (!cur_val) return NULL;
+    
+    if (yyjson_mut_is_obj(ctx->ctn)) {
+        yyjson_mut_val *key = ctx->pre->next->next;
+        yyjson_mut_obj_put(ctx->ctn, key, new_val);
+    } else {
+        yyjson_ptr_ctx_replace(ctx, new_val);
+    }
+    ctx->old = cur_val;
+    return cur_val;
+}
+
+yyjson_mut_val *unsafe_yyjson_mut_ptr_removex(yyjson_mut_val *val,
+                                              const char *ptr,
+                                              size_t len,
+                                              yyjson_ptr_ctx *ctx,
+                                              yyjson_ptr_err *err) {
+    yyjson_mut_val *cur_val;
+    yyjson_ptr_ctx cur_ctx;
+    memset(&cur_ctx, 0, sizeof(cur_ctx));
+    if (!ctx) ctx = &cur_ctx;
+    cur_val = unsafe_yyjson_mut_ptr_getx(val, ptr, len, ctx, err);
+    if (cur_val) {
+        if (yyjson_mut_is_obj(ctx->ctn)) {
+            yyjson_mut_val *key = ctx->pre->next->next;
+            yyjson_mut_obj_put(ctx->ctn, key, NULL);
+        } else {
+            yyjson_ptr_ctx_remove(ctx);
+        }
+        ctx->pre = NULL;
+        ctx->old = cur_val;
+    }
+    return cur_val;
+}
+
+#undef return_err
+#undef return_err_resolve
+#undef return_err_syntax
+#undef return_err_alloc
+
+#endif /* !YYJSON_DISABLE_UTILS */
+
+
+
+/*==============================================================================
+ * JSON Patch API
+ *
+ * These functions implement the JSON Patch specification (RFC 6902).
+ * These functions are independent of the JSON reader and writer.
+ *============================================================================*/
+
+#if !YYJSON_DISABLE_UTILS
+
+#define return_err(_code, _msg) do { \
+    if (err->ptr.code == YYJSON_PTR_ERR_MEMORY_ALLOCATION) { \
+        err->code = YYJSON_PATCH_ERROR_MEMORY_ALLOCATION; \
+        err->msg = _msg; \
+        memset(&err->ptr, 0, sizeof(yyjson_ptr_err)); \
+    } else { \
+        err->code = YYJSON_PATCH_ERROR_##_code; \
+        err->msg = _msg; \
+        err->idx = iter.idx ? iter.idx - 1 : 0; \
+    } \
+    return NULL; \
+} while (false)
+
+#define return_err_copy() \
+    return_err(MEMORY_ALLOCATION, "failed to copy value")
+#define return_err_key(_key) \
+    return_err(MISSING_KEY, "missing key " _key)
+#define return_err_val(_key) \
+    return_err(INVALID_MEMBER, "invalid member " _key)
+
+#define ptr_get(_ptr) yyjson_mut_ptr_getx( \
+    root, _ptr->uni.str, _ptr##_len, NULL, &err->ptr)
+#define ptr_add(_ptr, _val) yyjson_mut_ptr_addx( \
+    root, _ptr->uni.str, _ptr##_len, _val, doc, false, NULL, &err->ptr)
+#define ptr_remove(_ptr) yyjson_mut_ptr_removex( \
+    root, _ptr->uni.str, _ptr##_len, NULL, &err->ptr)
+#define ptr_replace(_ptr, _val)yyjson_mut_ptr_replacex( \
+    root, _ptr->uni.str, _ptr##_len, _val, NULL, &err->ptr)
+
+/* JSON Patch operation */
+typedef enum patch_op {
+    PATCH_OP_ADD,       /* path, value */
+    PATCH_OP_REMOVE,    /* path */
+    PATCH_OP_REPLACE,   /* path, value */
+    PATCH_OP_MOVE,      /* from, path */
+    PATCH_OP_COPY,      /* from, path */
+    PATCH_OP_TEST,      /* path, value */
+    PATCH_OP_NONE       /* invalid */
+} patch_op;
+
+static patch_op patch_op_get(yyjson_val *op) {
+    const char *str = op->uni.str;
+    switch (unsafe_yyjson_get_len(op)) {
+        case 3:
+            if (!memcmp(str, "add", 3)) return PATCH_OP_ADD;
+            return PATCH_OP_NONE;
+        case 4:
+            if (!memcmp(str, "move", 4)) return PATCH_OP_MOVE;
+            if (!memcmp(str, "copy", 4)) return PATCH_OP_COPY;
+            if (!memcmp(str, "test", 4)) return PATCH_OP_TEST;
+            return PATCH_OP_NONE;
+        case 6:
+            if (!memcmp(str, "remove", 6)) return PATCH_OP_REMOVE;
+            return PATCH_OP_NONE;
+        case 7:
+            if (!memcmp(str, "replace", 7)) return PATCH_OP_REPLACE;
+            return PATCH_OP_NONE;
+        default:
+            return PATCH_OP_NONE;
+    }
+}
+
+yyjson_mut_val *yyjson_patch(yyjson_mut_doc *doc,
+                             yyjson_val *orig,
+                             yyjson_val *patch,
+                             yyjson_patch_err *err) {
+
+    yyjson_mut_val *root;
+    yyjson_val *obj;
+    yyjson_arr_iter iter;
+    yyjson_patch_err err_tmp;
+    if (!err) err = &err_tmp;
+    memset(err, 0, sizeof(*err));
+    memset(&iter, 0, sizeof(iter));
+    
+    if (unlikely(!doc || !orig || !patch)) {
+        return_err(INVALID_PARAMETER, "input parameter is NULL");
+    }
+    if (unlikely(!yyjson_is_arr(patch))) {
+        return_err(INVALID_PARAMETER, "input patch is not array");
+    }
+    root = yyjson_val_mut_copy(doc, orig);
+    if (unlikely(!root)) return_err_copy();
+    
+    /* iterate through the patch array */
+    yyjson_arr_iter_init(patch, &iter);
+    while ((obj = yyjson_arr_iter_next(&iter))) {
+        patch_op op_enum;
+        yyjson_val *op, *path, *from = NULL, *value;
+        yyjson_mut_val *val = NULL, *test;
+        usize path_len, from_len = 0;
+        if (unlikely(!unsafe_yyjson_is_obj(obj))) {
+            return_err(INVALID_OPERATION, "JSON patch operation is not object");
+        }
+        
+        /* get required member: op */
+        op = yyjson_obj_get(obj, "op");
+        if (unlikely(!op)) return_err_key("`op`");
+        if (unlikely(!yyjson_is_str(op))) return_err_val("`op`");
+        op_enum = patch_op_get(op);
+        
+        /* get required member: path */
+        path = yyjson_obj_get(obj, "path");
+        if (unlikely(!path)) return_err_key("`path`");
+        if (unlikely(!yyjson_is_str(path))) return_err_val("`path`");
+        path_len = unsafe_yyjson_get_len(path);
+        
+        /* get required member: value, from */
+        switch ((int)op_enum) {
+            case PATCH_OP_ADD: case PATCH_OP_REPLACE: case PATCH_OP_TEST:
+                value = yyjson_obj_get(obj, "value");
+                if (unlikely(!value)) return_err_key("`value`");
+                val = yyjson_val_mut_copy(doc, value);
+                if (unlikely(!val)) return_err_copy();
+                break;
+            case PATCH_OP_MOVE: case PATCH_OP_COPY:
+                from = yyjson_obj_get(obj, "from");
+                if (unlikely(!from)) return_err_key("`from`");
+                if (unlikely(!yyjson_is_str(from))) return_err_val("`from`");
+                from_len = unsafe_yyjson_get_len(from);
+                break;
+            default:
+                break;
+        }
+        
+        /* perform an operation */
+        switch ((int)op_enum) {
+            case PATCH_OP_ADD: /* add(path, val) */
+                if (unlikely(path_len == 0)) { root = val; break; }
+                if (unlikely(!ptr_add(path, val))) {
+                    return_err(POINTER, "failed to add `path`");
+                }
+                break;
+            case PATCH_OP_REMOVE: /* remove(path) */
+                if (unlikely(!ptr_remove(path))) {
+                    return_err(POINTER, "failed to remove `path`");
+                }
+                break;
+            case PATCH_OP_REPLACE: /* replace(path, val) */
+                if (unlikely(path_len == 0)) { root = val; break; }
+                if (unlikely(!ptr_replace(path, val))) {
+                    return_err(POINTER, "failed to replace `path`");
+                }
+                break;
+            case PATCH_OP_MOVE: /* val = remove(from), add(path, val) */
+                if (unlikely(from_len == 0 && path_len == 0)) break;
+                val = ptr_remove(from);
+                if (unlikely(!val)) {
+                    return_err(POINTER, "failed to remove `from`");
+                }
+                if (unlikely(path_len == 0)) { root = val; break; }
+                if (unlikely(!ptr_add(path, val))) {
+                    return_err(POINTER, "failed to add `path`");
+                }
+                break;
+            case PATCH_OP_COPY: /* val = get(from).copy, add(path, val) */
+                val = ptr_get(from);
+                if (unlikely(!val)) {
+                    return_err(POINTER, "failed to get `from`");
+                }
+                if (unlikely(path_len == 0)) { root = val; break; }
+                val = yyjson_mut_val_mut_copy(doc, val);
+                if (unlikely(!val)) return_err_copy();
+                if (unlikely(!ptr_add(path, val))) {
+                    return_err(POINTER, "failed to add `path`");
+                }
+                break;
+            case PATCH_OP_TEST: /* test = get(path), test.eq(val) */
+                test = ptr_get(path);
+                if (unlikely(!test)) {
+                    return_err(POINTER, "failed to get `path`");
+                }
+                if (unlikely(!yyjson_mut_equals(val, test))) {
+                    return_err(EQUAL, "failed to test equal");
+                }
+                break;
+            default:
+                return_err(INVALID_MEMBER, "unsupported `op`");
+        }
+    }
+    return root;
+}
+
+yyjson_mut_val *yyjson_mut_patch(yyjson_mut_doc *doc,
+                                 yyjson_mut_val *orig,
+                                 yyjson_mut_val *patch,
+                                 yyjson_patch_err *err) {
+    yyjson_mut_val *root, *obj;
+    yyjson_mut_arr_iter iter;
+    yyjson_patch_err err_tmp;
+    if (!err) err = &err_tmp;
+    memset(err, 0, sizeof(*err));
+    memset(&iter, 0, sizeof(iter));
+    
+    if (unlikely(!doc || !orig || !patch)) {
+        return_err(INVALID_PARAMETER, "input parameter is NULL");
+    }
+    if (unlikely(!yyjson_mut_is_arr(patch))) {
+        return_err(INVALID_PARAMETER, "input patch is not array");
+    }
+    root = yyjson_mut_val_mut_copy(doc, orig);
+    if (unlikely(!root)) return_err_copy();
+    
+    /* iterate through the patch array */
+    yyjson_mut_arr_iter_init(patch, &iter);
+    while ((obj = yyjson_mut_arr_iter_next(&iter))) {
+        patch_op op_enum;
+        yyjson_mut_val *op, *path, *from = NULL, *value;
+        yyjson_mut_val *val = NULL, *test;
+        usize path_len, from_len = 0;
+        if (!unsafe_yyjson_is_obj(obj)) {
+            return_err(INVALID_OPERATION, "JSON patch operation is not object");
+        }
+        
+        /* get required member: op */
+        op = yyjson_mut_obj_get(obj, "op");
+        if (unlikely(!op)) return_err_key("`op`");
+        if (unlikely(!yyjson_mut_is_str(op))) return_err_val("`op`");
+        op_enum = patch_op_get((yyjson_val *)(void *)op);
+        
+        /* get required member: path */
+        path = yyjson_mut_obj_get(obj, "path");
+        if (unlikely(!path)) return_err_key("`path`");
+        if (unlikely(!yyjson_mut_is_str(path))) return_err_val("`path`");
+        path_len = unsafe_yyjson_get_len(path);
+        
+        /* get required member: value, from */
+        switch ((int)op_enum) {
+            case PATCH_OP_ADD: case PATCH_OP_REPLACE: case PATCH_OP_TEST:
+                value = yyjson_mut_obj_get(obj, "value");
+                if (unlikely(!value)) return_err_key("`value`");
+                val = yyjson_mut_val_mut_copy(doc, value);
+                if (unlikely(!val)) return_err_copy();
+                break;
+            case PATCH_OP_MOVE: case PATCH_OP_COPY:
+                from = yyjson_mut_obj_get(obj, "from");
+                if (unlikely(!from)) return_err_key("`from`");
+                if (unlikely(!yyjson_mut_is_str(from))) {
+                    return_err_val("`from`");
+                }
+                from_len = unsafe_yyjson_get_len(from);
+                break;
+            default:
+                break;
+        }
+        
+        /* perform an operation */
+        switch ((int)op_enum) {
+            case PATCH_OP_ADD: /* add(path, val) */
+                if (unlikely(path_len == 0)) { root = val; break; }
+                if (unlikely(!ptr_add(path, val))) {
+                    return_err(POINTER, "failed to add `path`");
+                }
+                break;
+            case PATCH_OP_REMOVE: /* remove(path) */
+                if (unlikely(!ptr_remove(path))) {
+                    return_err(POINTER, "failed to remove `path`");
+                }
+                break;
+            case PATCH_OP_REPLACE: /* replace(path, val) */
+                if (unlikely(path_len == 0)) { root = val; break; }
+                if (unlikely(!ptr_replace(path, val))) {
+                    return_err(POINTER, "failed to replace `path`");
+                }
+                break;
+            case PATCH_OP_MOVE: /* val = remove(from), add(path, val) */
+                if (unlikely(from_len == 0 && path_len == 0)) break;
+                val = ptr_remove(from);
+                if (unlikely(!val)) {
+                    return_err(POINTER, "failed to remove `from`");
+                }
+                if (unlikely(path_len == 0)) { root = val; break; }
+                if (unlikely(!ptr_add(path, val))) {
+                    return_err(POINTER, "failed to add `path`");
+                }
+                break;
+            case PATCH_OP_COPY: /* val = get(from).copy, add(path, val) */
+                val = ptr_get(from);
+                if (unlikely(!val)) {
+                    return_err(POINTER, "failed to get `from`");
+                }
+                if (unlikely(path_len == 0)) { root = val; break; }
+                val = yyjson_mut_val_mut_copy(doc, val);
+                if (unlikely(!val)) return_err_copy();
+                if (unlikely(!ptr_add(path, val))) {
+                    return_err(POINTER, "failed to add `path`");
+                }
+                break;
+            case PATCH_OP_TEST: /* test = get(path), test.eq(val) */
+                test = ptr_get(path);
+                if (unlikely(!test)) {
+                    return_err(POINTER, "failed to get `path`");
+                }
+                if (unlikely(!yyjson_mut_equals(val, test))) {
+                    return_err(EQUAL, "failed to test equal");
+                }
+                break;
+            default:
+                return_err(INVALID_MEMBER, "unsupported `op`");
+        }
+    }
+    return root;
+}
+
+#undef return_err
+#undef return_err_copy
+#undef return_err_key
+#undef return_err_val
+#undef ptr_get
+#undef ptr_add
+#undef ptr_remove
+#undef ptr_replace
+
+#endif /* !YYJSON_DISABLE_UTILS */
+
+
+
+/*==============================================================================
+ * JSON Merge-Patch API
+ *
+ * These functions implement the JSON Merge-Patch specification (RFC 7386).
+ * These functions are independent of the JSON reader and writer.
+ *============================================================================*/
+
+#if !YYJSON_DISABLE_UTILS
+
+yyjson_mut_val *yyjson_merge_patch(yyjson_mut_doc *doc,
+                                   yyjson_val *orig,
+                                   yyjson_val *patch) {
+    usize idx, max;
+    yyjson_val *key, *orig_val, *patch_val, local_orig;
+    yyjson_mut_val *builder, *mut_key, *mut_val, *merged_val;
+    
+    if (unlikely(!yyjson_is_obj(patch))) {
+        return yyjson_val_mut_copy(doc, patch);
+    }
+    
+    builder = yyjson_mut_obj(doc);
+    if (unlikely(!builder)) return NULL;
+    
+    memset(&local_orig, 0, sizeof(local_orig));
+    if (!yyjson_is_obj(orig)) {
+        orig = &local_orig;
+        orig->tag = builder->tag;
+        orig->uni = builder->uni;
+    }
+    
+    /* If orig is contributing, copy any items not modified by the patch */
+    if (orig != &local_orig) {
+        yyjson_obj_foreach(orig, idx, max, key, orig_val) {
+            patch_val = yyjson_obj_getn(patch,
+                                        unsafe_yyjson_get_str(key),
+                                        unsafe_yyjson_get_len(key));
+            if (!patch_val) {
+                mut_key = yyjson_val_mut_copy(doc, key);
+                mut_val = yyjson_val_mut_copy(doc, orig_val);
+                if (!yyjson_mut_obj_add(builder, mut_key, mut_val)) return NULL;
+            }
+        }
+    }
+
+    /* Merge items modified by the patch. */
+    yyjson_obj_foreach(patch, idx, max, key, patch_val) {
+        /* null indicates the field is removed. */
+        if (unsafe_yyjson_is_null(patch_val)) {
+            continue;
+        }
+        mut_key = yyjson_val_mut_copy(doc, key);
+        orig_val = yyjson_obj_getn(orig,
+                                   unsafe_yyjson_get_str(key),
+                                   unsafe_yyjson_get_len(key));
+        merged_val = yyjson_merge_patch(doc, orig_val, patch_val);
+        if (!yyjson_mut_obj_add(builder, mut_key, merged_val)) return NULL;
+    }
+    
+    return builder;
+}
+
+yyjson_mut_val *yyjson_mut_merge_patch(yyjson_mut_doc *doc,
+                                       yyjson_mut_val *orig,
+                                       yyjson_mut_val *patch) {
+    usize idx, max;
+    yyjson_mut_val *key, *orig_val, *patch_val, local_orig;
+    yyjson_mut_val *builder, *mut_key, *mut_val, *merged_val;
+    
+    if (unlikely(!yyjson_mut_is_obj(patch))) {
+        return yyjson_mut_val_mut_copy(doc, patch);
+    }
+    
+    builder = yyjson_mut_obj(doc);
+    if (unlikely(!builder)) return NULL;
+    
+    memset(&local_orig, 0, sizeof(local_orig));
+    if (!yyjson_mut_is_obj(orig)) {
+        orig = &local_orig;
+        orig->tag = builder->tag;
+        orig->uni = builder->uni;
+    }
+    
+    /* If orig is contributing, copy any items not modified by the patch */
+    if (orig != &local_orig) {
+        yyjson_mut_obj_foreach(orig, idx, max, key, orig_val) {
+            patch_val = yyjson_mut_obj_getn(patch,
+                                            unsafe_yyjson_get_str(key),
+                                            unsafe_yyjson_get_len(key));
+            if (!patch_val) {
+                mut_key = yyjson_mut_val_mut_copy(doc, key);
+                mut_val = yyjson_mut_val_mut_copy(doc, orig_val);
+                if (!yyjson_mut_obj_add(builder, mut_key, mut_val)) return NULL;
+            }
+        }
+    }
+
+    /* Merge items modified by the patch. */
+    yyjson_mut_obj_foreach(patch, idx, max, key, patch_val) {
+        /* null indicates the field is removed. */
+        if (unsafe_yyjson_is_null(patch_val)) {
+            continue;
+        }
+        mut_key = yyjson_mut_val_mut_copy(doc, key);
+        orig_val = yyjson_mut_obj_getn(orig,
+                                       unsafe_yyjson_get_str(key),
+                                       unsafe_yyjson_get_len(key));
+        merged_val = yyjson_mut_merge_patch(doc, orig_val, patch_val);
+        if (!yyjson_mut_obj_add(builder, mut_key, merged_val)) return NULL;
+    }
+    
+    return builder;
+}
+
+#endif /* !YYJSON_DISABLE_UTILS */
