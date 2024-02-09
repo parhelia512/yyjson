@@ -603,6 +603,109 @@ static_inline u32 byte_load_4(const void *src) {
 
 
 /*==============================================================================
+ * UTF8 Validation (Private)
+ *
+ * Each unicode code point is encoded as 1 to 4 bytes in UTF-8 encoding,
+ * we use 4-byte mask and pattern value to validate UTF-8 byte sequence,
+ * this requires the input data to have 4-byte zero padding.
+ *============================================================================*/
+
+/* Macro for concatenating four u8 into a u32 and keeping the byte order. */
+#if YYJSON_ENDIAN == YYJSON_LITTLE_ENDIAN
+#   define utf8_seq_def(name, a, b, c, d) \
+        static const u32 utf8_seq_##name = 0x##d##c##b##a##UL;
+#   define utf8_seq(name) utf8_seq_##name
+#elif YYJSON_ENDIAN == YYJSON_BIG_ENDIAN
+#   define utf8_seq_def(name, a, b, c, d) \
+        static const u32 utf8_seq_##name = 0x##a##b##c##d##UL;
+#   define utf8_seq(name) utf8_seq_##name
+#else
+#   define utf8_seq_def(name, a, b, c, d) \
+        static const v32_uni utf8_uni_##name = {{ 0x##a, 0x##b, 0x##c, 0x##d }};
+#   define utf8_seq(name) utf8_uni_##name.u
+#endif
+
+/*
+ 1-byte sequence (U+0000 to U+007F)
+ bit min        [.......0] (U+0000)
+ bit max        [.1111111] (U+007F)
+ bit mask       [x.......] (80)
+ bit pattern    [0.......] (00)
+ */
+utf8_seq_def(b1_mask, 80, 00, 00, 00)
+utf8_seq_def(b1_patt, 00, 00, 00, 00)
+
+#define is_utf8_seq1(uni) ( \
+    ((uni & utf8_seq(b1_mask)) == utf8_seq(b1_patt)) \
+)
+
+/*
+ 2-byte sequence (U+0080 to U+07FF)
+ bit min        [......10 ..000000] (U+0080)
+ bit max        [...11111 ..111111] (U+07FF)
+ bit mask       [xxx..... xx......] (E0 C0)
+ bit pattern    [110..... 10......] (C0 80)
+ bit require    [...xxxx. ........] (1E 00)
+ */
+utf8_seq_def(b2_mask, E0, C0, 00, 00)
+utf8_seq_def(b2_patt, C0, 80, 00, 00)
+utf8_seq_def(b2_requ, 1E, 00, 00, 00)
+
+#define is_utf8_seq2(uni) ( \
+    ((uni & utf8_seq(b2_mask)) == utf8_seq(b2_patt)) && \
+    ((uni & utf8_seq(b2_requ))) \
+)
+
+/*
+ 3-byte sequence (U+0800 to U+FFFF)
+ bit min        [........ ..100000 ..000000] (U+0800)
+ bit max        [....1111 ..111111 ..111111] (U+FFFF)
+ bit mask       [xxxx.... xx...... xx......] (F0 C0 C0)
+ bit pattern    [1110.... 10...... 10......] (E0 80 80)
+ bit require    [....xxxx ..x..... ........] (0F 20 00)
+ 
+ 3-byte invalid sequence, reserved for surrogate halves (U+D800 to U+DFFF)
+ bit min        [....1101 ..100000 ..000000] (U+D800)
+ bit max        [....1101 ..111111 ..111111] (U+DFFF)
+ bit mask       [....xxxx ..x..... ........] (0F 20 00)
+ bit pattern    [....1101 ..1..... ........] (0D 20 00)
+ */
+utf8_seq_def(b3_mask, F0, C0, C0, 00)
+utf8_seq_def(b3_patt, E0, 80, 80, 00)
+utf8_seq_def(b3_requ, 0F, 20, 00, 00)
+utf8_seq_def(b3_erro, 0D, 20, 00, 00)
+
+#define is_utf8_seq3(uni) ( \
+    ((uni & utf8_seq(b3_mask)) == utf8_seq(b3_patt)) && \
+    ((tmp = (uni & utf8_seq(b3_requ)))) && \
+    ((tmp != utf8_seq(b3_erro))) \
+)
+
+/*
+ 4-byte sequence (U+10000 to U+10FFFF)
+ bit min        [........ ...10000 ..000000 ..000000] (U+10000)
+ bit max        [.....100 ..001111 ..111111 ..111111] (U+10FFFF)
+ bit mask       [xxxxx... xx...... xx...... xx......] (F8 C0 C0 C0)
+ bit pattern    [11110... 10...... 10...... 10......] (F0 80 80 80)
+ bit require    [.....xxx ..xx.... ........ ........] (07 30 00 00)
+ bit require 1  [.....x.. ........ ........ ........] (04 00 00 00)
+ bit require 2  [......xx ..xx.... ........ ........] (03 30 00 00)
+ */
+utf8_seq_def(b4_mask, F8, C0, C0, C0)
+utf8_seq_def(b4_patt, F0, 80, 80, 80)
+utf8_seq_def(b4_requ, 07, 30, 00, 00)
+utf8_seq_def(b4_req1, 04, 00, 00, 00)
+utf8_seq_def(b4_req2, 03, 30, 00, 00)
+
+#define is_utf8_seq4(uni) ( \
+    ((uni & utf8_seq(b4_mask)) == utf8_seq(b4_patt)) && \
+    ((tmp = (uni & utf8_seq(b4_requ)))) && \
+    ((tmp & utf8_seq(b4_req1)) == 0 || (tmp & utf8_seq(b4_req2)) == 0) \
+)
+
+
+
+/*==============================================================================
  * JSON Character Type (Private)
  *============================================================================*/
 
@@ -2802,9 +2905,19 @@ static const u8 hex_conv_table[256] = {
 };
 
 /**
- Scans an escaped character sequence as a UTF-16 code unit (branchless).
- e.g. "\\u005C" should pass "005C" as `cur`.
- 
+ Read 2-char hex string to u8 number.
+ This requires the string has 2-byte zero padding.
+ */
+static_inline bool read_hex_u8(const u8 *cur, u8 *val) {
+    u8 c0, c1;
+    c0 = hex_conv_table[cur[0]];
+    c1 = hex_conv_table[cur[1]];
+    *val = (u8)((c0 << 4) | c1);
+    return ((c0 | c1) & (u8)0xF0) == 0;
+}
+
+/**
+ Read 4-char hex string to u16 number.
  This requires the string has 4-byte zero padding.
  */
 static_inline bool read_hex_u16(const u8 *cur, u16 *val) {
@@ -4250,130 +4363,19 @@ static_inline bool read_string(u8 **ptr,
                                yyjson_val *val,
                                const char **msg) {
     /*
-     Each unicode code point is encoded as 1 to 4 bytes in UTF-8 encoding,
-     we use 4-byte mask and pattern value to validate UTF-8 byte sequence,
-     this requires the input data to have 4-byte zero padding.
-     ---------------------------------------------------
-     1 byte
-     unicode range [U+0000, U+007F]
-     unicode min   [.......0]
-     unicode max   [.1111111]
-     bit pattern   [0.......]
-     ---------------------------------------------------
-     2 byte
-     unicode range [U+0080, U+07FF]
-     unicode min   [......10 ..000000]
-     unicode max   [...11111 ..111111]
-     bit require   [...xxxx. ........] (1E 00)
-     bit mask      [xxx..... xx......] (E0 C0)
-     bit pattern   [110..... 10......] (C0 80)
-     ---------------------------------------------------
-     3 byte
-     unicode range [U+0800, U+FFFF]
-     unicode min   [........ ..100000 ..000000]
-     unicode max   [....1111 ..111111 ..111111]
-     bit require   [....xxxx ..x..... ........] (0F 20 00)
-     bit mask      [xxxx.... xx...... xx......] (F0 C0 C0)
-     bit pattern   [1110.... 10...... 10......] (E0 80 80)
-     ---------------------------------------------------
-     3 byte invalid (reserved for surrogate halves)
-     unicode range [U+D800, U+DFFF]
-     unicode min   [....1101 ..100000 ..000000]
-     unicode max   [....1101 ..111111 ..111111]
-     bit mask      [....xxxx ..x..... ........] (0F 20 00)
-     bit pattern   [....1101 ..1..... ........] (0D 20 00)
-     ---------------------------------------------------
-     4 byte
-     unicode range [U+10000, U+10FFFF]
-     unicode min   [........ ...10000 ..000000 ..000000]
-     unicode max   [.....100 ..001111 ..111111 ..111111]
-     bit require   [.....xxx ..xx.... ........ ........] (07 30 00 00)
-     bit mask      [xxxxx... xx...... xx...... xx......] (F8 C0 C0 C0)
-     bit pattern   [11110... 10...... 10...... 10......] (F0 80 80 80)
-     ---------------------------------------------------
+     GCC may sometimes load variables into registers too early, causing
+     unnecessary instructions and performance degradation. This inline assembly
+     serves as a hint to GCC: 'This variable will be modified, so avoid loading
+     it too early.' Other compilers like MSVC, Clang, and ICC can generate the
+     expected instructions without needing this hint.
+     
+     Check out this example: https://godbolt.org/z/YG6a5W5Ec
      */
-#if YYJSON_ENDIAN == YYJSON_BIG_ENDIAN
-    const u32 b1_mask = 0x80000000UL;
-    const u32 b1_patt = 0x00000000UL;
-    const u32 b2_mask = 0xE0C00000UL;
-    const u32 b2_patt = 0xC0800000UL;
-    const u32 b2_requ = 0x1E000000UL;
-    const u32 b3_mask = 0xF0C0C000UL;
-    const u32 b3_patt = 0xE0808000UL;
-    const u32 b3_requ = 0x0F200000UL;
-    const u32 b3_erro = 0x0D200000UL;
-    const u32 b4_mask = 0xF8C0C0C0UL;
-    const u32 b4_patt = 0xF0808080UL;
-    const u32 b4_requ = 0x07300000UL;
-    const u32 b4_err0 = 0x04000000UL;
-    const u32 b4_err1 = 0x03300000UL;
-#elif YYJSON_ENDIAN == YYJSON_LITTLE_ENDIAN
-    const u32 b1_mask = 0x00000080UL;
-    const u32 b1_patt = 0x00000000UL;
-    const u32 b2_mask = 0x0000C0E0UL;
-    const u32 b2_patt = 0x000080C0UL;
-    const u32 b2_requ = 0x0000001EUL;
-    const u32 b3_mask = 0x00C0C0F0UL;
-    const u32 b3_patt = 0x008080E0UL;
-    const u32 b3_requ = 0x0000200FUL;
-    const u32 b3_erro = 0x0000200DUL;
-    const u32 b4_mask = 0xC0C0C0F8UL;
-    const u32 b4_patt = 0x808080F0UL;
-    const u32 b4_requ = 0x00003007UL;
-    const u32 b4_err0 = 0x00000004UL;
-    const u32 b4_err1 = 0x00003003UL;
+#if YYJSON_IS_REAL_GCC
+#   define reg_write_hint(var) __asm__ volatile("":"=m"(var))
 #else
-    /* this should be evaluated at compile-time */
-    v32_uni b1_mask_uni = {{ 0x80, 0x00, 0x00, 0x00 }};
-    v32_uni b1_patt_uni = {{ 0x00, 0x00, 0x00, 0x00 }};
-    v32_uni b2_mask_uni = {{ 0xE0, 0xC0, 0x00, 0x00 }};
-    v32_uni b2_patt_uni = {{ 0xC0, 0x80, 0x00, 0x00 }};
-    v32_uni b2_requ_uni = {{ 0x1E, 0x00, 0x00, 0x00 }};
-    v32_uni b3_mask_uni = {{ 0xF0, 0xC0, 0xC0, 0x00 }};
-    v32_uni b3_patt_uni = {{ 0xE0, 0x80, 0x80, 0x00 }};
-    v32_uni b3_requ_uni = {{ 0x0F, 0x20, 0x00, 0x00 }};
-    v32_uni b3_erro_uni = {{ 0x0D, 0x20, 0x00, 0x00 }};
-    v32_uni b4_mask_uni = {{ 0xF8, 0xC0, 0xC0, 0xC0 }};
-    v32_uni b4_patt_uni = {{ 0xF0, 0x80, 0x80, 0x80 }};
-    v32_uni b4_requ_uni = {{ 0x07, 0x30, 0x00, 0x00 }};
-    v32_uni b4_err0_uni = {{ 0x04, 0x00, 0x00, 0x00 }};
-    v32_uni b4_err1_uni = {{ 0x03, 0x30, 0x00, 0x00 }};
-    u32 b1_mask = b1_mask_uni.u;
-    u32 b1_patt = b1_patt_uni.u;
-    u32 b2_mask = b2_mask_uni.u;
-    u32 b2_patt = b2_patt_uni.u;
-    u32 b2_requ = b2_requ_uni.u;
-    u32 b3_mask = b3_mask_uni.u;
-    u32 b3_patt = b3_patt_uni.u;
-    u32 b3_requ = b3_requ_uni.u;
-    u32 b3_erro = b3_erro_uni.u;
-    u32 b4_mask = b4_mask_uni.u;
-    u32 b4_patt = b4_patt_uni.u;
-    u32 b4_requ = b4_requ_uni.u;
-    u32 b4_err0 = b4_err0_uni.u;
-    u32 b4_err1 = b4_err1_uni.u;
+#   define reg_write_hint(var)
 #endif
-    
-#define is_valid_seq_1(uni) ( \
-    ((uni & b1_mask) == b1_patt) \
-)
-
-#define is_valid_seq_2(uni) ( \
-    ((uni & b2_mask) == b2_patt) && \
-    ((uni & b2_requ)) \
-)
-    
-#define is_valid_seq_3(uni) ( \
-    ((uni & b3_mask) == b3_patt) && \
-    ((tmp = (uni & b3_requ))) && \
-    ((tmp != b3_erro)) \
-)
-    
-#define is_valid_seq_4(uni) ( \
-    ((uni & b4_mask) == b4_patt) && \
-    ((tmp = (uni & b4_requ))) && \
-    ((tmp & b4_err0) == 0 || (tmp & b4_err1) == 0) \
-)
     
 #define return_err(_end, _msg) do { \
     *msg = _msg; \
@@ -4397,10 +4399,10 @@ skip_ascii_begin:
      explicit goto statements. We hope the compiler can generate instructions
      like this: https://godbolt.org/z/8vjsYq
      
-         while (true) repeat16({
-            if (likely(!(char_is_ascii_stop(*src)))) src++;
-            else break;
-         })
+     while (true) repeat16({
+         if (likely(!(char_is_ascii_stop(*src)))) src++;
+         else break;
+     })
      */
 #define expr_jump(i) \
     if (likely(!char_is_ascii_stop(src[i]))) {} \
@@ -4420,18 +4422,7 @@ skip_ascii_begin:
 #undef expr_stop
     
 skip_ascii_end:
-    
-    /*
-     GCC may store src[i] in a register at each line of expr_jump(i) above.
-     These instructions are useless and will degrade performance.
-     This inline asm is a hint for gcc: "the memory has been modified,
-     do not cache it".
-     
-     MSVC, Clang, ICC can generate expected instructions without this hint.
-     */
-#if YYJSON_IS_REAL_GCC
-    __asm__ volatile("":"=m"(*src));
-#endif
+    reg_write_hint(*src);
     if (likely(*src == '"')) {
         val->tag = ((u64)(src - cur) << YYJSON_TAG_BIT) |
                     (u64)(YYJSON_TYPE_STR | YYJSON_SUBTYPE_NOESC);
@@ -4467,16 +4458,16 @@ skip_utf8:
         })
 #else
         uni = byte_load_4(src);
-        while (is_valid_seq_3(uni)) {
+        while (is_utf8_seq3(uni)) {
             src += 3;
             uni = byte_load_4(src);
         }
-        if (is_valid_seq_1(uni)) goto skip_ascii;
-        while (is_valid_seq_2(uni)) {
+        if (is_utf8_seq1(uni)) goto skip_ascii;
+        while (is_utf8_seq2(uni)) {
             src += 2;
             uni = byte_load_4(src);
         }
-        while (is_valid_seq_4(uni)) {
+        while (is_utf8_seq4(uni)) {
             src += 4;
             uni = byte_load_4(src);
         }
@@ -4559,21 +4550,17 @@ copy_ascii:
     /*
      Copy continuous ASCII, loop unrolling, same as the following code:
      
-         while (true) repeat16({
-            if (unlikely(char_is_ascii_stop(*src))) break;
-            *dst++ = *src++;
-         })
+     while (true) repeat16({
+         if (unlikely(char_is_ascii_stop(*src))) break;
+         *dst++ = *src++;
+     })
      */
-#if YYJSON_IS_REAL_GCC
-#   define expr_jump(i) \
+#define expr_jump(i) \
     if (likely(!(char_is_ascii_stop(src[i])))) {} \
-    else { __asm__ volatile("":"=m"(src[i])); goto copy_ascii_stop_##i; }
-#else
-#   define expr_jump(i) \
-    if (likely(!(char_is_ascii_stop(src[i])))) {} \
-    else { goto copy_ascii_stop_##i; }
-#endif
+    else { reg_write_hint(src[i]); goto copy_ascii_stop_##i; }
+    
     repeat16_incr(expr_jump)
+    
 #undef expr_jump
     
     byte_move_16(dst, src);
@@ -4679,16 +4666,16 @@ copy_utf8:
         uni = byte_load_4(src);
 #if YYJSON_DISABLE_UTF8_VALIDATION
         while (true) repeat4({
-            if ((uni & b3_mask) == b3_patt) {
+            if ((uni & utf8_seq(b3_mask)) == utf8_seq(b3_patt)) {
                 byte_copy_4(dst, &uni);
                 dst += 3;
                 src += 3;
                 uni = byte_load_4(src);
             } else break;
         })
-        if ((uni & b1_mask) == b1_patt) goto copy_ascii;
+        if ((uni & utf8_seq(b1_mask)) == utf8_seq(b1_patt)) goto copy_ascii;
         while (true) repeat4({
-            if ((uni & b2_mask) == b2_patt) {
+            if ((uni & utf8_seq(b2_mask)) == utf8_seq(b2_patt)) {
                 byte_copy_2(dst, &uni);
                 dst += 2;
                 src += 2;
@@ -4696,7 +4683,7 @@ copy_utf8:
             } else break;
         })
         while (true) repeat4({
-            if ((uni & b4_mask) == b4_patt) {
+            if ((uni & utf8_seq(b4_mask)) == utf8_seq(b4_patt)) {
                 byte_copy_4(dst, &uni);
                 dst += 4;
                 src += 4;
@@ -4704,20 +4691,20 @@ copy_utf8:
             } else break;
         })
 #else
-        while (is_valid_seq_3(uni)) {
+        while (is_utf8_seq3(uni)) {
             byte_copy_4(dst, &uni);
             dst += 3;
             src += 3;
             uni = byte_load_4(src);
         }
-        if (is_valid_seq_1(uni)) goto copy_ascii;
-        while (is_valid_seq_2(uni)) {
+        if (is_utf8_seq1(uni)) goto copy_ascii;
+        while (is_utf8_seq2(uni)) {
             byte_copy_2(dst, &uni);
             dst += 2;
             src += 2;
             uni = byte_load_4(src);
         }
-        while (is_valid_seq_4(uni)) {
+        while (is_utf8_seq4(uni)) {
             byte_copy_4(dst, &uni);
             dst += 4;
             src += 4;
@@ -4732,11 +4719,8 @@ copy_utf8:
     }
     goto copy_escape;
     
+#undef reg_write_hint
 #undef return_err
-#undef is_valid_seq_1
-#undef is_valid_seq_2
-#undef is_valid_seq_3
-#undef is_valid_seq_4
 }
 
 
@@ -6987,78 +6971,6 @@ static_inline u8 *write_string(u8 *cur, bool esc, bool inv,
                                const u8 *str, usize str_len,
                                const char_enc_type *enc_table) {
     
-    /* UTF-8 character mask and pattern, see `read_string()` for details. */
-#if YYJSON_ENDIAN == YYJSON_BIG_ENDIAN
-    const u16 b2_mask = 0xE0C0UL;
-    const u16 b2_patt = 0xC080UL;
-    const u16 b2_requ = 0x1E00UL;
-    const u32 b3_mask = 0xF0C0C000UL;
-    const u32 b3_patt = 0xE0808000UL;
-    const u32 b3_requ = 0x0F200000UL;
-    const u32 b3_erro = 0x0D200000UL;
-    const u32 b4_mask = 0xF8C0C0C0UL;
-    const u32 b4_patt = 0xF0808080UL;
-    const u32 b4_requ = 0x07300000UL;
-    const u32 b4_err0 = 0x04000000UL;
-    const u32 b4_err1 = 0x03300000UL;
-#elif YYJSON_ENDIAN == YYJSON_LITTLE_ENDIAN
-    const u16 b2_mask = 0xC0E0UL;
-    const u16 b2_patt = 0x80C0UL;
-    const u16 b2_requ = 0x001EUL;
-    const u32 b3_mask = 0x00C0C0F0UL;
-    const u32 b3_patt = 0x008080E0UL;
-    const u32 b3_requ = 0x0000200FUL;
-    const u32 b3_erro = 0x0000200DUL;
-    const u32 b4_mask = 0xC0C0C0F8UL;
-    const u32 b4_patt = 0x808080F0UL;
-    const u32 b4_requ = 0x00003007UL;
-    const u32 b4_err0 = 0x00000004UL;
-    const u32 b4_err1 = 0x00003003UL;
-#else
-    /* this should be evaluated at compile-time */
-    v16_uni b2_mask_uni = {{ 0xE0, 0xC0 }};
-    v16_uni b2_patt_uni = {{ 0xC0, 0x80 }};
-    v16_uni b2_requ_uni = {{ 0x1E, 0x00 }};
-    v32_uni b3_mask_uni = {{ 0xF0, 0xC0, 0xC0, 0x00 }};
-    v32_uni b3_patt_uni = {{ 0xE0, 0x80, 0x80, 0x00 }};
-    v32_uni b3_requ_uni = {{ 0x0F, 0x20, 0x00, 0x00 }};
-    v32_uni b3_erro_uni = {{ 0x0D, 0x20, 0x00, 0x00 }};
-    v32_uni b4_mask_uni = {{ 0xF8, 0xC0, 0xC0, 0xC0 }};
-    v32_uni b4_patt_uni = {{ 0xF0, 0x80, 0x80, 0x80 }};
-    v32_uni b4_requ_uni = {{ 0x07, 0x30, 0x00, 0x00 }};
-    v32_uni b4_err0_uni = {{ 0x04, 0x00, 0x00, 0x00 }};
-    v32_uni b4_err1_uni = {{ 0x03, 0x30, 0x00, 0x00 }};
-    u16 b2_mask = b2_mask_uni.u;
-    u16 b2_patt = b2_patt_uni.u;
-    u16 b2_requ = b2_requ_uni.u;
-    u32 b3_mask = b3_mask_uni.u;
-    u32 b3_patt = b3_patt_uni.u;
-    u32 b3_requ = b3_requ_uni.u;
-    u32 b3_erro = b3_erro_uni.u;
-    u32 b4_mask = b4_mask_uni.u;
-    u32 b4_patt = b4_patt_uni.u;
-    u32 b4_requ = b4_requ_uni.u;
-    u32 b4_err0 = b4_err0_uni.u;
-    u32 b4_err1 = b4_err1_uni.u;
-#endif
-    
-#define is_valid_seq_2(uni) ( \
-    ((uni & b2_mask) == b2_patt) && \
-    ((uni & b2_requ)) \
-)
-    
-#define is_valid_seq_3(uni) ( \
-    ((uni & b3_mask) == b3_patt) && \
-    ((tmp = (uni & b3_requ))) && \
-    ((tmp != b3_erro)) \
-)
-    
-#define is_valid_seq_4(uni) ( \
-    ((uni & b4_mask) == b4_patt) && \
-    ((tmp = (uni & b4_requ))) && \
-    ((tmp & b4_err0) == 0 || (tmp & b4_err1) == 0) \
-)
-    
     /* The replacement character U+FFFD, used to indicate invalid character. */
     const v32 rep = {{ 'F', 'F', 'F', 'D' }};
     const v32 pre = {{ '\\', 'u', '0', '0' }};
@@ -7117,12 +7029,13 @@ copy_utf8:
             goto copy_ascii;
         }
         case CHAR_ENC_CPY_2: {
-            u16 v;
 #if YYJSON_DISABLE_UTF8_VALIDATION
             byte_copy_2(cur, src);
 #else
-            v = byte_load_2(src);
-            if (unlikely(!is_valid_seq_2(v))) goto err_cpy;
+            u32 v4 = 0;
+            u16 v2 = byte_load_2(src);
+            byte_copy_2(&v4, &v2);
+            if (unlikely(!is_utf8_seq2(v4))) goto err_cpy;
             byte_copy_2(cur, src);
 #endif
             cur += 2;
@@ -7130,7 +7043,6 @@ copy_utf8:
             goto copy_utf8;
         }
         case CHAR_ENC_CPY_3: {
-            u32 v, tmp;
 #if YYJSON_DISABLE_UTF8_VALIDATION
             if (likely(src + 4 <= end)) {
                 byte_copy_4(cur, src);
@@ -7139,13 +7051,14 @@ copy_utf8:
                 cur[2] = src[2];
             }
 #else
+            u32 v, tmp;
             if (likely(src + 4 <= end)) {
                 v = byte_load_4(src);
-                if (unlikely(!is_valid_seq_3(v))) goto err_cpy;
+                if (unlikely(!is_utf8_seq3(v))) goto err_cpy;
                 byte_copy_4(cur, src);
             } else {
                 v = byte_load_3(src);
-                if (unlikely(!is_valid_seq_3(v))) goto err_cpy;
+                if (unlikely(!is_utf8_seq3(v))) goto err_cpy;
                 byte_copy_4(cur, &v);
             }
 #endif
@@ -7154,12 +7067,12 @@ copy_utf8:
             goto copy_utf8;
         }
         case CHAR_ENC_CPY_4: {
-            u32 v, tmp;
 #if YYJSON_DISABLE_UTF8_VALIDATION
             byte_copy_4(cur, src);
 #else
+            u32 v, tmp;
             v = byte_load_4(src);
-            if (unlikely(!is_valid_seq_4(v))) goto err_cpy;
+            if (unlikely(!is_utf8_seq4(v))) goto err_cpy;
             byte_copy_4(cur, src);
 #endif
             cur += 4;
@@ -7183,7 +7096,7 @@ copy_utf8:
             u16 u, v;
 #if !YYJSON_DISABLE_UTF8_VALIDATION
             v = byte_load_2(src);
-            if (unlikely(!is_valid_seq_2(v))) goto err_esc;
+            if (unlikely(!is_utf8_seq2(v))) goto err_esc;
 #endif
             u = (u16)(((u16)(src[0] & 0x1F) << 6) |
                       ((u16)(src[1] & 0x3F) << 0));
@@ -7199,7 +7112,7 @@ copy_utf8:
             u32 v, tmp;
 #if !YYJSON_DISABLE_UTF8_VALIDATION
             v = byte_load_3(src);
-            if (unlikely(!is_valid_seq_3(v))) goto err_esc;
+            if (unlikely(!is_utf8_seq3(v))) goto err_esc;
 #endif
             u = (u16)(((u16)(src[0] & 0x0F) << 12) |
                       ((u16)(src[1] & 0x3F) << 6) |
@@ -7215,7 +7128,7 @@ copy_utf8:
             u32 hi, lo, u, v, tmp;
 #if !YYJSON_DISABLE_UTF8_VALIDATION
             v = byte_load_4(src);
-            if (unlikely(!is_valid_seq_4(v))) goto err_esc;
+            if (unlikely(!is_utf8_seq4(v))) goto err_esc;
 #endif
             u = ((u32)(src[0] & 0x07) << 18) |
                 ((u32)(src[1] & 0x3F) << 12) |
@@ -7260,10 +7173,6 @@ err_esc:
     cur += 6;
     src += 1;
     goto copy_utf8;
-    
-#undef is_valid_seq_2
-#undef is_valid_seq_3
-#undef is_valid_seq_4
 }
 
 
