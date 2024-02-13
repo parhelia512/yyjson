@@ -610,7 +610,7 @@ static_inline u32 byte_load_4(const void *src) {
  * this requires the input data to have 4-byte zero padding.
  *============================================================================*/
 
-/* Macro for concatenating four u8 into a u32 and keeping the byte order. */
+/* Macro for concatenating four u8 into one u32 and keeping the byte order. */
 #if YYJSON_ENDIAN == YYJSON_LITTLE_ENDIAN
 #   define utf8_seq_def(name, a, b, c, d) \
         static const u32 utf8_seq_##name = 0x##d##c##b##a##UL;
@@ -725,7 +725,7 @@ static const char_type CHAR_TYPE_ESC_ASCII  = 1 << 2;
 static const char_type CHAR_TYPE_NON_ASCII  = 1 << 3;
 
 /** JSON container character: '{', '['. */
-static const char_type CHAR_TYPE_CONTAINER  = 1 << 4;
+static const char_type CHAR_TYPE_CONTAINER  = 1 << 4; /* unused */
 
 /** Comment character: '/'. */
 static const char_type CHAR_TYPE_COMMENT    = 1 << 5;
@@ -794,7 +794,7 @@ static_inline bool char_is_number(u8 c) {
 
 /** Match a JSON container: '{', '['. */
 static_inline bool char_is_container(u8 c) {
-    return char_is_type(c, (char_type)CHAR_TYPE_CONTAINER);
+    return c == (u8)'{' || c == (u8)'[';
 }
 
 /** Match a stop character in ASCII string: '"', '\', [0x00-0x1F,0x80-0xFF]. */
@@ -829,10 +829,10 @@ static const digi_type DIGI_TYPE_ZERO       = 1 << 0;
 static const digi_type DIGI_TYPE_NONZERO    = 1 << 1;
 
 /** Plus sign (positive): '+'. */
-static const digi_type DIGI_TYPE_POS        = 1 << 2;
+static const digi_type DIGI_TYPE_POS        = 1 << 2; /* unused */
 
 /** Minus sign (negative): '-'. */
-static const digi_type DIGI_TYPE_NEG        = 1 << 3;
+static const digi_type DIGI_TYPE_NEG        = 1 << 3; /* unused */
 
 /** Decimal point: '.' */
 static const digi_type DIGI_TYPE_DOT        = 1 << 4;
@@ -867,22 +867,22 @@ static_inline bool digi_is_type(u8 d, digi_type type) {
 
 /** Match a sign: '+', '-' */
 static_inline bool digi_is_sign(u8 d) {
-    return digi_is_type(d, (digi_type)(DIGI_TYPE_POS | DIGI_TYPE_NEG));
+    return d == (u8)'-' || d == (u8)'+';
 }
 
 /** Match a none zero digit: [1-9] */
 static_inline bool digi_is_nonzero(u8 d) {
-    return digi_is_type(d, (digi_type)DIGI_TYPE_NONZERO);
+    return (u8)'1' <= d && d <= (u8)'9';
 }
 
 /** Match a digit: [0-9] */
 static_inline bool digi_is_digit(u8 d) {
-    return digi_is_type(d, (digi_type)(DIGI_TYPE_ZERO | DIGI_TYPE_NONZERO));
+    return (u8)'0' <= d && d <= (u8)'9';
 }
 
 /** Match an exponent sign: 'e', 'E'. */
 static_inline bool digi_is_exp(u8 d) {
-    return digi_is_type(d, (digi_type)DIGI_TYPE_EXP);
+    return d == (u8)'e' || d == (u8)'E';
 }
 
 /** Match a floating point indicator: '.', 'e', 'E'. */
@@ -976,7 +976,7 @@ static_inline bool digi_is_digit_or_fp(u8 d) {
 #define U64_POW10_MAX_EXACT_EXP 19
 
 /** Table: [ 10^0, ..., 10^19 ] (generate with misc/make_tables.c) */
-static const u64 u64_pow10_table[U64_POW10_MAX_EXACT_EXP + 1] = {
+static const u64 u64_pow10_table[] = {
     U64(0x00000000, 0x00000001), U64(0x00000000, 0x0000000A),
     U64(0x00000000, 0x00000064), U64(0x00000000, 0x000003E8),
     U64(0x00000000, 0x00002710), U64(0x00000000, 0x000186A0),
@@ -989,22 +989,22 @@ static const u64 u64_pow10_table[U64_POW10_MAX_EXACT_EXP + 1] = {
     U64(0x0DE0B6B3, 0xA7640000), U64(0x8AC72304, 0x89E80000)
 };
 
-/** Minimum decimal exponent in u128_pow10_table. */
+/** Minimum decimal exponent in `u128_pow10_sig_table`. */
 #define U128_POW10_MIN_EXP -343
 
-/** Maximum decimal exponent in u128_pow10_table. */
+/** Maximum decimal exponent in `u128_pow10_sig_table`. */
 #define U128_POW10_MAX_EXP 324
 
-/** Minimum exact decimal exponent in u128_pow10_table */
+/** Minimum exact decimal exponent in `u128_pow10_sig_table` */
 #define U128_POW10_MIN_EXACT_EXP 0
 
-/** Maximum exact decimal exponent in u128_pow10_table */
+/** Maximum exact decimal exponent in `u128_pow10_sig_table` */
 #define U128_POW10_MAX_EXACT_EXP 55
 
 /** Normalized significant 128 bits of pow10, no rounded up (size: 10.4KB).
     This lookup table is used by both the double number reader and writer.
     (generate with misc/make_tables.c) */
-static const u64 u128_pow10_table[] = {
+static const u64 u128_pow10_sig_table[] = {
     U64(0xBF29DCAB, 0xA82FDEAE), U64(0x7432EE87, 0x3880FC33), /* ~= 10^-343 */
     U64(0xEEF453D6, 0x923BD65A), U64(0x113FAA29, 0x06A13B3F), /* ~= 10^-342 */
     U64(0x9558B466, 0x1B6565F8), U64(0x4AC7CA59, 0xA424C507), /* ~= 10^-341 */
@@ -1676,7 +1676,7 @@ static const u64 u128_pow10_table[] = {
 };
 
 /**
- Get the cached pow10 value from u128_pow10_table.
+ Get the cached pow10 value from `u128_pow10_sig_table`.
  @param exp10 The exponent of pow(10, e). This value must in range
               U128_POW10_MIN_EXP to U128_POW10_MAX_EXP.
  @param hi    The highest 64 bits of pow(10, e).
@@ -1684,12 +1684,13 @@ static const u64 u128_pow10_table[] = {
  */
 static_inline void u128_pow10_get_sig(i32 exp10, u64 *hi, u64 *lo) {
     i32 idx = exp10 - (U128_POW10_MIN_EXP);
-    *hi = u128_pow10_table[idx * 2];
-    *lo = u128_pow10_table[idx * 2 + 1];
+    *hi = u128_pow10_sig_table[idx * 2];
+    *lo = u128_pow10_sig_table[idx * 2 + 1];
 }
 
 /**
- Get the exponent (base 2) for highest 64 bits significand in u128_pow10_table.
+ Get the exponent (base 2) for highest 64 bits significand in 
+ `u128_pow10_sig_table`.
  */
 static_inline void u128_pow10_get_exp(i32 exp10, i32 *exp2) {
     /* e2 = floor(log2(pow(10, e))) - 64 + 1 */
@@ -3881,7 +3882,7 @@ digi_finish:
          the exponent part (10^exp) can be converted to (sig2 * 2^exp2).
          
          The sig2 can be an infinite length number, only the highest 128 bits
-         is cached in the u128_pow10_table.
+         is cached in the u128_pow10_sig_table.
          
          Now we have these bits:
          sig1 (normalized 64bit)        : aaaaaaaa

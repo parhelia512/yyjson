@@ -30,7 +30,31 @@ typedef size_t      usize;
 
 /*----------------------------------------------------------------------------*/
 
-void make_pow10_sig_table(void) {
+static void make_u64_pow10_table(void) {
+    int table_len = 20;
+    int line_len = 2;
+    printf("#define U64_POW10_MAX_EXACT_EXP %d\n", table_len - 1);
+    printf("static const u64 u64_pow10_table[] = {\n");
+    for (int i = 0; i < table_len; i++) {
+        bool is_head = ((i % line_len) == 0);
+        bool is_tail = ((i % line_len) == line_len - 1);
+        bool is_last = i + 1 == table_len;
+        
+        u64 num = 1;
+        for (int e = 0; e < i; e++) num *= 10;
+        
+        if (is_head) printf("    ");
+        printf("U64(0x%.8X, 0x%.8X)", (u32)(num >> 32), (u32)(num));
+        if (i + 1 < table_len) printf(",");
+        if (!is_tail && !is_last) printf(" "); else printf("\n");
+    }
+    printf("};\n");
+    printf("\n");
+}
+
+/*----------------------------------------------------------------------------*/
+
+void make_u128_pow10_table(void) {
     static const int DEF_PREC = 5000;
     static const int BUF_LEN = 2000;
     char buf[BUF_LEN];
@@ -46,11 +70,11 @@ void make_pow10_sig_table(void) {
     
     int e10min = -343, e10max = 324, e10step = 1;
     
-    printf("#define POW10_SIG_TABLE_MIN_EXP %d\n", e10min);
-    printf("#define POW10_SIG_TABLE_MAX_EXP %d\n", e10max);
-    printf("#define POW10_SIG_TABLE_MIN_EXACT_EXP %d\n", 0);
-    printf("#define POW10_SIG_TABLE_MAX_EXACT_EXP %d\n", 55);
-    printf("static const u64 pow10_sig_table[] = {\n");
+    printf("#define U128_POW10_MIN_EXP %d\n", e10min);
+    printf("#define U128_POW10_MAX_EXP %d\n", e10max);
+    printf("#define U128_POW10_MIN_EXACT_EXP %d\n", 0);
+    printf("#define U128_POW10_MAX_EXACT_EXP %d\n", 55);
+    printf("static const u64 u128_pow10_sig_table[] = {\n");
     
     for (int e10 = e10min; e10 <= e10max; e10 += e10step) {
         mpfr_set_d(pow10, 10, MPFR_RNDN);
@@ -134,6 +158,40 @@ static void make_dec_trailing_zero_table(void) {
     }
     printf("};\n");
     printf("\n");
+}
+
+/*----------------------------------------------------------------------------*/
+
+/**
+ Encode unicode code point to UTF-8.
+ @param uni unicode code point in range [0, 0x10FFFF].
+ @param buf 4-byte buffer.
+ @return number of bytes used.
+ */
+static u32 utf8_encode(u8 *buf, u32 uni) {
+    if (uni <= 0x7F) {
+        buf[0] = (u8)uni;
+        return 1;
+    }
+    if (uni <= 0x7FF) {
+        buf[0] = (u8)(((uni >> 6) & 0x1F) | 0xC0);
+        buf[1] = (u8)(((uni >> 0) & 0x3F) | 0x80);
+        return 2;
+    }
+    if (uni <= 0xFFFF) {
+        buf[0] = (u8)(((uni >> 12) & 0x0F) | 0xE0);
+        buf[1] = (u8)(((uni >>  6) & 0x3F) | 0x80);
+        buf[2] = (u8)(((uni >>  0) & 0x3F) | 0x80);
+        return 3;
+    }
+    if (uni <= 0x10FFFF) {
+        buf[0] = (u8)(((uni >> 18) & 0x07) | 0xF0);
+        buf[1] = (u8)(((uni >> 12) & 0x3F) | 0x80);
+        buf[2] = (u8)(((uni >>  6) & 0x3F) | 0x80);
+        buf[3] = (u8)(((uni >>  0) & 0x3F) | 0x80);
+        return 4;
+    }
+    return 0;
 }
 
 /*----------------------------------------------------------------------------*/
@@ -299,30 +357,6 @@ static void make_hex_conv_table(void) {
 
 /*----------------------------------------------------------------------------*/
 
-static void make_u64_pow10_table(void) {
-    int table_len = 20;
-    int line_len = 2;
-    
-    printf("static const u64 u64_pow10_table[U64_POW10_MAX_EXP + 1] = {\n");
-    for (int i = 0; i < table_len; i++) {
-        bool is_head = ((i % line_len) == 0);
-        bool is_tail = ((i % line_len) == line_len - 1);
-        bool is_last = i + 1 == table_len;
-        
-        u64 num = 1;
-        for (int e = 0; e < i; e++) num *= 10;
-        
-        if (is_head) printf("    ");
-        printf("U64(0x%.8X, 0x%.8X)", (u32)(num >> 32), (u32)(num));
-        if (i + 1 < table_len) printf(",");
-        if (!is_tail && !is_last) printf(" "); else printf("\n");
-    }
-    printf("};\n");
-    printf("\n");
-}
-
-/*----------------------------------------------------------------------------*/
-
 /** Character encode type, if (type > CHAR_ENC_ERR_1) bytes = type / 2; */
 #define CHAR_ENC_CPY_1  0 /* 1-byte UTF-8, copy. */
 #define CHAR_ENC_ERR_1  1 /* 1-byte UTF-8, error. */
@@ -471,12 +505,12 @@ static void make_esc_single_char_table(void) {
 }
 
 int main(void) {
-    make_pow10_sig_table();
+    make_u64_pow10_table();
+    make_u128_pow10_table();
     make_dec_trailing_zero_table();
     make_char_table();
     make_digit_table();
     make_hex_conv_table();
-    make_u64_pow10_table();
     make_enc_table();
     make_esc_hex_char_table();
     make_esc_single_char_table();
