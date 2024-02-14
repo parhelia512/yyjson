@@ -2849,6 +2849,7 @@ bool unsafe_yyjson_mut_equals(yyjson_mut_val *lhs, yyjson_mut_val *rhs) {
 static_inline bool read_flag_eq(yyjson_read_flag flg, yyjson_read_flag chk) {
 #if YYJSON_DISABLE_NON_STANDARD
     if (chk == YYJSON_READ_ALLOW_INF_AND_NAN ||
+        chk == YYJSON_READ_INF_AND_NAN_AS_NULL ||
         chk == YYJSON_READ_ALLOW_COMMENTS ||
         chk == YYJSON_READ_ALLOW_TRAILING_COMMAS ||
         chk == YYJSON_READ_ALLOW_INVALID_UNICODE)
@@ -2940,6 +2941,45 @@ static_inline bool read_hex_u16(const u8 *cur, u16 *val) {
  * These functions are used by JSON reader to read literals and comments.
  *============================================================================*/
 
+/** Returns true if `cur` matches `str`.
+    `cur` should be the padded json string, `str` should be a string literal. */
+static_inline bool is_str_matched(u8 *cur, const char *str, bool ignore_case) {
+    usize i, len = strlen(str);
+    const u8 *cmp = (const u8 *)str;
+    if (ignore_case) {
+        u8 dif = 'a' - 'A';
+        for (i = 0; i < len; i++) {
+            if (cur[i] != cmp[i] && cur[i] != cmp[i] - dif) return false;
+        }
+    } else {
+        for (i = 0; i < len; i++) {
+            if (cur[i] != cmp[i]) return false;
+        }
+    }
+    return true;
+}
+
+/** Returns true if `cur` matches `str` but is truncated. 
+    `cur` should be the padded json string, `str` should be a string literal. */
+static_inline bool is_str_truncated(u8 *cur, u8 *end,
+                                    const char *str, bool ignore_case) {
+    usize i, len = strlen(str);
+    const u8 *cmp = (const u8 *)str;
+    if (cur >= end || cur + len <= end || len == 0) return false;
+    
+    if (ignore_case) {
+        u8 dif = 'a' - 'A';
+        for (; cur < end; cur++, cmp++) {
+            if (*cur != *cmp && *cur != *cmp - dif) return false;
+        }
+    } else {
+        for (; cur < end; cur++, cmp++) {
+            if (*cur != *cmp) return false;
+        }
+    }
+    return true;
+}
+
 /** Read 'true' literal, '*cur' should be 't'. */
 static_inline bool read_true(u8 **ptr, yyjson_val *val) {
     u8 *cur = *ptr;
@@ -2976,70 +3016,40 @@ static_inline bool read_null(u8 **ptr, yyjson_val *val) {
     return false;
 }
 
-/** Read 'Inf' or 'Infinity' literal (ignoring case). */
-static_inline bool read_inf(bool sign, u8 **ptr, u8 **pre, yyjson_val *val) {
+/** Read 'Inf', 'Infinity' or 'NaN' literal (ignoring case). */
+static_noinline bool read_inf_or_nan(bool sign, u8 **ptr, u8 **pre,
+                                     yyjson_read_flag flg,
+                                     yyjson_val *val) {
     u8 *hdr = *ptr - sign;
     u8 *cur = *ptr;
     u8 **end = ptr;
-    if ((cur[0] == 'I' || cur[0] == 'i') &&
-        (cur[1] == 'N' || cur[1] == 'n') &&
-        (cur[2] == 'F' || cur[2] == 'f')) {
-        if ((cur[3] == 'I' || cur[3] == 'i') &&
-            (cur[4] == 'N' || cur[4] == 'n') &&
-            (cur[5] == 'I' || cur[5] == 'i') &&
-            (cur[6] == 'T' || cur[6] == 't') &&
-            (cur[7] == 'Y' || cur[7] == 'y')) {
-            cur += 8;
-        } else {
-            cur += 3;
-        }
+    bool is_inf = false;
+    
+    if (is_str_matched(cur, "inf", true)) {
+        cur += 3;
+        if (is_str_matched(cur, "inity", true)) cur += 5;
         *end = cur;
-        if (pre) {
-            /* add null-terminator for previous raw string */
-            if (*pre) **pre = '\0';
-            *pre = cur;
-            val->tag = ((u64)(cur - hdr) << YYJSON_TAG_BIT) | YYJSON_TYPE_RAW;
-            val->uni.str = (const char *)hdr;
-        } else {
-            val->tag = YYJSON_TYPE_NUM | YYJSON_SUBTYPE_REAL;
-            val->uni.u64 = f64_get_inf_bin(sign);
-        }
-        return true;
-    }
-    return false;
-}
-
-/** Read 'NaN' literal (ignoring case). */
-static_inline bool read_nan(bool sign, u8 **ptr, u8 **pre, yyjson_val *val) {
-    u8 *hdr = *ptr - sign;
-    u8 *cur = *ptr;
-    u8 **end = ptr;
-    if ((cur[0] == 'N' || cur[0] == 'n') &&
-        (cur[1] == 'A' || cur[1] == 'a') &&
-        (cur[2] == 'N' || cur[2] == 'n')) {
+        is_inf = true;
+    } else if (is_str_matched(cur, "nan", true)) {
         cur += 3;
         *end = cur;
-        if (pre) {
-            /* add null-terminator for previous raw string */
-            if (*pre) **pre = '\0';
-            *pre = cur;
-            val->tag = ((u64)(cur - hdr) << YYJSON_TAG_BIT) | YYJSON_TYPE_RAW;
-            val->uni.str = (const char *)hdr;
-        } else {
-            val->tag = YYJSON_TYPE_NUM | YYJSON_SUBTYPE_REAL;
-            val->uni.u64 = f64_get_nan_bin(sign);
-        }
-        return true;
+    } else {
+        return false;
     }
-    return false;
-}
-
-/** Read 'Inf', 'Infinity' or 'NaN' literal (ignoring case). */
-static_inline bool read_inf_or_nan(bool sign, u8 **ptr, u8 **pre,
-                                   yyjson_val *val) {
-    if (read_inf(sign, ptr, pre, val)) return true;
-    if (read_nan(sign, ptr, pre, val)) return true;
-    return false;
+    
+    if (pre && has_flag(NUMBER_AS_RAW)) {
+        if (*pre) **pre = '\0'; /* end the previous raw string */
+        *pre = cur; /* set current raw string */
+        val->tag = ((u64)(cur - hdr) << YYJSON_TAG_BIT) | YYJSON_TYPE_RAW;
+        val->uni.str = (const char *)hdr;
+    } else if (has_flag(INF_AND_NAN_AS_NULL)) {
+        val->tag = YYJSON_TYPE_NULL;
+        val->uni.u64 = 0;
+    } else {
+        val->tag = YYJSON_TYPE_NUM | YYJSON_SUBTYPE_REAL;
+        val->uni.u64 = is_inf ? f64_get_inf_bin(sign) : f64_get_nan_bin(sign);
+    }
+    return true;
 }
 
 /** Read a JSON number as raw string. */
@@ -3073,8 +3083,8 @@ static_noinline bool read_number_raw(u8 **ptr,
     
     /* read first digit, check leading zero */
     if (unlikely(!digi_is_digit(*cur))) {
-        if (has_flag(ALLOW_INF_AND_NAN)) {
-            if (read_inf_or_nan(*hdr == '-', &cur, pre, val)) return_raw();
+        if (has_flag(ALLOW_INF_AND_NAN) || has_flag(INF_AND_NAN_AS_NULL)) {
+            if (read_inf_or_nan(*hdr == '-', &cur, pre, flg, val)) return_raw();
         }
         return_err(cur, "no digit after minus sign");
     }
@@ -3160,38 +3170,16 @@ static_noinline bool skip_spaces_and_comments(u8 **ptr) {
     return hdr != cur;
 }
 
-/**
- Check truncated string.
- Returns true if `cur` match `str` but is truncated.
- */
-static_inline bool is_truncated_str(u8 *cur, u8 *end,
-                                    const char *str,
-                                    bool case_sensitive) {
-    usize len = strlen(str);
-    if (cur + len <= end || end <= cur) return false;
-    if (case_sensitive) {
-        return memcmp(cur, str, (usize)(end - cur)) == 0;
-    }
-    for (; cur < end; cur++, str++) {
-        if ((*cur != (u8)*str) && (*cur != (u8)*str - 'a' + 'A')) {
-            return false;
-        }
-    }
-    return true;
-}
-
-/**
- Check truncated JSON on parsing errors.
- Returns true if the input is valid but truncated.
- */
+/** Check truncated JSON on parsing errors.
+    Returns true if the input is valid but truncated. */
 static_noinline bool is_truncated_end(u8 *hdr, u8 *cur, u8 *end,
                                       yyjson_read_code code,
                                       yyjson_read_flag flg) {
     if (cur >= end) return true;
     if (code == YYJSON_READ_ERROR_LITERAL) {
-        if (is_truncated_str(cur, end, "true", true) ||
-            is_truncated_str(cur, end, "false", true) ||
-            is_truncated_str(cur, end, "null", true)) {
+        if (is_str_truncated(cur, end, "true", false) ||
+            is_str_truncated(cur, end, "false", false) ||
+            is_str_truncated(cur, end, "null", false)) {
             return true;
         }
     }
@@ -3200,8 +3188,8 @@ static_noinline bool is_truncated_end(u8 *hdr, u8 *cur, u8 *end,
         code == YYJSON_READ_ERROR_LITERAL) {
         if (has_flag(ALLOW_INF_AND_NAN)) {
             if (*cur == '-') cur++;
-            if (is_truncated_str(cur, end, "infinity", false) ||
-                is_truncated_str(cur, end, "nan", false)) {
+            if (is_str_truncated(cur, end, "infinity", true) ||
+                is_str_truncated(cur, end, "nan", true)) {
                 return true;
             }
         }
@@ -3209,7 +3197,7 @@ static_noinline bool is_truncated_end(u8 *hdr, u8 *cur, u8 *end,
     if (code == YYJSON_READ_ERROR_UNEXPECTED_CONTENT) {
         if (has_flag(ALLOW_INF_AND_NAN)) {
             if (hdr + 3 <= cur &&
-                is_truncated_str(cur - 3, end, "infinity", false)) {
+                is_str_truncated(cur - 3, end, "infinity", true)) {
                 return true; /* e.g. infin would be read as inf + in */
             }
         }
@@ -3553,6 +3541,11 @@ static_inline bool read_number(u8 **ptr,
     return false; \
 } while (false)
     
+#define return_null() do { \
+    val->tag = YYJSON_TYPE_NULL; \
+    *end = cur; return true; \
+} while (false)
+    
 #define return_0() do { \
     val->tag = YYJSON_TYPE_NUM | (u8)((u8)sign << 3); \
     val->uni.u64 = 0; \
@@ -3579,6 +3572,7 @@ static_inline bool read_number(u8 **ptr,
     
 #define return_inf() do { \
     if (has_flag(BIGNUM_AS_RAW)) return_raw(); \
+    if (has_flag(INF_AND_NAN_AS_NULL)) return_null(); \
     if (has_flag(ALLOW_INF_AND_NAN)) return_f64_bin(F64_INF_BIN); \
     else return_err(hdr, "number is infinity when parsed as double"); \
 } while (false)
@@ -3619,8 +3613,8 @@ static_inline bool read_number(u8 **ptr,
     /* begin with a leading zero or non-digit */
     if (unlikely(!digi_is_nonzero(*cur))) { /* 0 or non-digit char */
         if (unlikely(*cur != '0')) { /* non-digit char */
-            if (has_flag(ALLOW_INF_AND_NAN)) {
-                if (read_inf_or_nan(sign, &cur, pre, val)) {
+            if (has_flag(ALLOW_INF_AND_NAN) || has_flag(INF_AND_NAN_AS_NULL)) {
+                if (read_inf_or_nan(sign, &cur, pre, flg, val)) {
                     *end = cur;
                     return true;
                 }
@@ -4165,6 +4159,11 @@ static_inline bool read_number(u8 **ptr,
     return false; \
 } while (false)
     
+#define return_null() do { \
+    val->tag = YYJSON_TYPE_NULL; \
+    *end = cur; return true; \
+} while (false)
+    
 #define return_0() do { \
     val->tag = YYJSON_TYPE_NUM | (u64)((u8)sign << 3); \
     val->uni.u64 = 0; \
@@ -4191,6 +4190,7 @@ static_inline bool read_number(u8 **ptr,
     
 #define return_inf() do { \
     if (has_flag(BIGNUM_AS_RAW)) return_raw(); \
+    if (has_flag(INF_AND_NAN_AS_NULL)) return_null(); \
     if (has_flag(ALLOW_INF_AND_NAN)) return_f64_bin(F64_INF_BIN); \
     else return_err(hdr, "number is infinity when parsed as double"); \
 } while (false)
@@ -4221,8 +4221,8 @@ static_inline bool read_number(u8 **ptr,
     
     /* read first digit, check leading zero */
     if (unlikely(!digi_is_digit(*cur))) {
-        if (has_flag(ALLOW_INF_AND_NAN)) {
-            if (read_inf_or_nan(sign, &cur, pre, val)) {
+        if (has_flag(ALLOW_INF_AND_NAN) || has_flag(INF_AND_NAN_AS_NULL)) {
+            if (read_inf_or_nan(sign, &cur, pre, flg, val)) {
                 *end = cur;
                 return true;
             }
@@ -4763,7 +4763,7 @@ static_noinline yyjson_doc *read_root_single(u8 *hdr,
     yyjson_doc *doc; /* the JSON document, equals to val_hdr */
     const char *msg; /* error message */
     
-    bool raw; /* read number as raw */
+    bool raw; /* read number/bignum as raw */
     bool inv; /* allow invalid unicode */
     u8 *raw_end; /* raw end for null-terminator */
     u8 **pre; /* previous raw end pointer */
@@ -4798,13 +4798,13 @@ static_noinline yyjson_doc *read_root_single(u8 *hdr,
     }
     if (*cur == 'n') {
         if (likely(read_null(&cur, val))) goto doc_end;
-        if (has_flag(ALLOW_INF_AND_NAN)) {
-            if (read_nan(false, &cur, pre, val)) goto doc_end;
+        if (has_flag(ALLOW_INF_AND_NAN) || has_flag(INF_AND_NAN_AS_NULL)) {
+            if (read_inf_or_nan(false, &cur, pre, flg, val)) goto doc_end;
         }
         goto fail_literal;
     }
-    if (has_flag(ALLOW_INF_AND_NAN)) {
-        if (read_inf_or_nan(false, &cur, pre, val)) goto doc_end;
+    if (has_flag(ALLOW_INF_AND_NAN) || has_flag(INF_AND_NAN_AS_NULL)) {
+        if (read_inf_or_nan(false, &cur, pre, flg, val)) goto doc_end;
     }
     goto fail_character;
     
@@ -4901,7 +4901,7 @@ static_inline yyjson_doc *read_root_minify(u8 *hdr,
     yyjson_doc *doc; /* the JSON document, equals to val_hdr */
     const char *msg; /* error message */
     
-    bool raw; /* read number as raw */
+    bool raw; /* read number/bignum as raw */
     bool inv; /* allow invalid unicode */
     u8 *raw_end; /* raw end for null-terminator */
     u8 **pre; /* previous raw end pointer */
@@ -4985,8 +4985,8 @@ arr_val_begin:
         val_incr();
         ctn_len++;
         if (likely(read_null(&cur, val))) goto arr_val_end;
-        if (has_flag(ALLOW_INF_AND_NAN)) {
-            if (read_nan(false, &cur, pre, val)) goto arr_val_end;
+        if (has_flag(ALLOW_INF_AND_NAN) || has_flag(INF_AND_NAN_AS_NULL)) {
+            if (read_inf_or_nan(false, &cur, pre, flg, val)) goto arr_val_end;
         }
         goto fail_literal;
     }
@@ -5001,11 +5001,11 @@ arr_val_begin:
         while (char_is_space(*++cur));
         goto arr_val_begin;
     }
-    if (has_flag(ALLOW_INF_AND_NAN) &&
+    if ((has_flag(ALLOW_INF_AND_NAN) || has_flag(INF_AND_NAN_AS_NULL)) &&
         (*cur == 'i' || *cur == 'I' || *cur == 'N')) {
         val_incr();
         ctn_len++;
-        if (read_inf_or_nan(false, &cur, pre, val)) goto arr_val_end;
+        if (read_inf_or_nan(false, &cur, pre, flg, val)) goto arr_val_end;
         goto fail_character;
     }
     if (has_flag(ALLOW_COMMENTS)) {
@@ -5138,8 +5138,8 @@ obj_val_begin:
         val++;
         ctn_len++;
         if (likely(read_null(&cur, val))) goto obj_val_end;
-        if (has_flag(ALLOW_INF_AND_NAN)) {
-            if (read_nan(false, &cur, pre, val)) goto obj_val_end;
+        if (has_flag(ALLOW_INF_AND_NAN) || has_flag(INF_AND_NAN_AS_NULL)) {
+            if (read_inf_or_nan(false, &cur, pre, flg, val)) goto obj_val_end;
         }
         goto fail_literal;
     }
@@ -5147,11 +5147,11 @@ obj_val_begin:
         while (char_is_space(*++cur));
         goto obj_val_begin;
     }
-    if (has_flag(ALLOW_INF_AND_NAN) &&
+    if ((has_flag(ALLOW_INF_AND_NAN) || has_flag(INF_AND_NAN_AS_NULL)) &&
         (*cur == 'i' || *cur == 'I' || *cur == 'N')) {
         val++;
         ctn_len++;
-        if (read_inf_or_nan(false, &cur, pre, val)) goto obj_val_end;
+        if (read_inf_or_nan(false, &cur, pre, flg, val)) goto obj_val_end;
         goto fail_character;
     }
     if (has_flag(ALLOW_COMMENTS)) {
@@ -5289,7 +5289,7 @@ static_inline yyjson_doc *read_root_pretty(u8 *hdr,
     yyjson_doc *doc; /* the JSON document, equals to val_hdr */
     const char *msg; /* error message */
     
-    bool raw; /* read number as raw */
+    bool raw; /* read number/bignum as raw */
     bool inv; /* allow invalid unicode */
     u8 *raw_end; /* raw end for null-terminator */
     u8 **pre; /* previous raw end pointer */
@@ -5388,8 +5388,8 @@ arr_val_begin:
         val_incr();
         ctn_len++;
         if (likely(read_null(&cur, val))) goto arr_val_end;
-        if (has_flag(ALLOW_INF_AND_NAN)) {
-            if (read_nan(false, &cur, pre, val)) goto arr_val_end;
+        if (has_flag(ALLOW_INF_AND_NAN) || has_flag(INF_AND_NAN_AS_NULL)) {
+            if (read_inf_or_nan(false, &cur, pre, flg, val)) goto arr_val_end;
         }
         goto fail_literal;
     }
@@ -5404,11 +5404,11 @@ arr_val_begin:
         while (char_is_space(*++cur));
         goto arr_val_begin;
     }
-    if (has_flag(ALLOW_INF_AND_NAN) &&
+    if ((has_flag(ALLOW_INF_AND_NAN) || has_flag(INF_AND_NAN_AS_NULL)) &&
         (*cur == 'i' || *cur == 'I' || *cur == 'N')) {
         val_incr();
         ctn_len++;
-        if (read_inf_or_nan(false, &cur, pre, val)) goto arr_val_end;
+        if (read_inf_or_nan(false, &cur, pre, flg, val)) goto arr_val_end;
         goto fail_character;
     }
     if (has_flag(ALLOW_COMMENTS)) {
@@ -5562,8 +5562,8 @@ obj_val_begin:
         val++;
         ctn_len++;
         if (likely(read_null(&cur, val))) goto obj_val_end;
-        if (has_flag(ALLOW_INF_AND_NAN)) {
-            if (read_nan(false, &cur, pre, val)) goto obj_val_end;
+        if (has_flag(ALLOW_INF_AND_NAN) || has_flag(INF_AND_NAN_AS_NULL)) {
+            if (read_inf_or_nan(false, &cur, pre, flg, val)) goto obj_val_end;
         }
         goto fail_literal;
     }
@@ -5571,11 +5571,11 @@ obj_val_begin:
         while (char_is_space(*++cur));
         goto obj_val_begin;
     }
-    if (has_flag(ALLOW_INF_AND_NAN) &&
+    if ((has_flag(ALLOW_INF_AND_NAN) || has_flag(INF_AND_NAN_AS_NULL)) &&
         (*cur == 'i' || *cur == 'I' || *cur == 'N')) {
         val++;
         ctn_len++;
-        if (read_inf_or_nan(false, &cur, pre, val)) goto obj_val_end;
+        if (read_inf_or_nan(false, &cur, pre, flg, val)) goto obj_val_end;
         goto fail_character;
     }
     if (has_flag(ALLOW_COMMENTS)) {
@@ -5912,7 +5912,7 @@ const char *yyjson_read_number(const char *dat,
 } while (false)
     
     u8 *hdr = constcast(u8 *)dat, *cur = hdr;
-    bool raw; /* read number as raw */
+    bool raw; /* read number/bignum as raw */
     u8 *raw_end; /* raw end for null-terminator */
     u8 **pre; /* previous raw end pointer */
     const char *msg;
@@ -5949,7 +5949,7 @@ const char *yyjson_read_number(const char *dat,
     hdr[dat_len] = 0;
 #endif
     
-    raw = (flg & (YYJSON_READ_NUMBER_AS_RAW | YYJSON_READ_BIGNUM_AS_RAW)) != 0;
+    raw = (bool)(has_flag(NUMBER_AS_RAW) || has_flag(BIGNUM_AS_RAW));
     raw_end = NULL;
     pre = raw ? &raw_end : NULL;
     
@@ -7094,10 +7094,12 @@ copy_utf8:
             goto copy_utf8;
         }
         case CHAR_ENC_ESC_2: {
-            u16 u, v;
+            u16 u;
 #if !YYJSON_DISABLE_UTF8_VALIDATION
-            v = byte_load_2(src);
-            if (unlikely(!is_utf8_seq2(v))) goto err_esc;
+            u32 v4 = 0;
+            u16 v2 = byte_load_2(src);
+            byte_copy_2(&v4, &v2);
+            if (unlikely(!is_utf8_seq2(v4))) goto err_esc;
 #endif
             u = (u16)(((u16)(src[0] & 0x1F) << 6) |
                       ((u16)(src[1] & 0x3F) << 0));
