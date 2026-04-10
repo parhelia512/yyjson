@@ -2499,9 +2499,11 @@ static void dyn_free(void *ctx_ptr, void *ptr) {
 yyjson_alc *yyjson_alc_dyn_new(void) {
     const yyjson_alc def = YYJSON_DEFAULT_ALC;
     usize hdr_len = sizeof(yyjson_alc) + sizeof(dyn_ctx);
-    yyjson_alc *alc = (yyjson_alc *)def.malloc(def.ctx, hdr_len);
-    dyn_ctx *ctx = (dyn_ctx *)(void *)(alc + 1);
+    yyjson_alc *alc;
+    dyn_ctx *ctx;
+    alc = (yyjson_alc *)def.malloc(def.ctx, hdr_len);
     if (unlikely(!alc)) return NULL;
+    ctx = (dyn_ctx *)(void *)(alc + 1);
     alc->malloc = dyn_malloc;
     alc->realloc = dyn_realloc;
     alc->free = dyn_free;
@@ -2512,9 +2514,10 @@ yyjson_alc *yyjson_alc_dyn_new(void) {
 
 void yyjson_alc_dyn_free(yyjson_alc *alc) {
     const yyjson_alc def = YYJSON_DEFAULT_ALC;
-    dyn_ctx *ctx = (dyn_ctx *)(void *)(alc + 1);
+    dyn_ctx *ctx;
     dyn_chunk *chunk, *next;
     if (unlikely(!alc)) return;
+    ctx = (dyn_ctx *)(void *)(alc + 1);
     for (chunk = ctx->free_list.next; chunk; chunk = next) {
         next = chunk->next;
         def.free(def.ctx, chunk);
