@@ -215,6 +215,7 @@ yyjson, feel free to open a PR to add it to this list.
 
 | Project          | Language     | Description                                                                                          |
 |------------------|--------------|------------------------------------------------------------------------------------------------------|
+| [ssrJSON][]      | Python       | A SIMD boosted high-performance and correct Python JSON parsing library, built on top of yyjson      |
 | [py_yyjson][]    | Python       | Python bindings for yyjson                                                                           |
 | [orjson][]       | Python       | JSON library for Python with an optional yyjson backend                                              |
 | [serin][]        | C++ / Python | a C++ and Python serialization library supporting TOON, JSON, and YAML with cross-format conversion. |
@@ -247,6 +248,7 @@ yyjson, feel free to open a PR to add it to this list.
 # License
 This project is released under the MIT license.
 
+[ssrJSON]: https://github.com/Antares0982/ssrJSON
 [py_yyjson]: https://github.com/tktech/py_yyjson
 [orjson]: https://github.com/ijl/orjson
 [serin]: https://github.com/mohammadraziei/serin
