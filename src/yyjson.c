@@ -8506,6 +8506,78 @@ static const u8 esc_hex_char_table[512] = {
     'F', 'C', 'F', 'D', 'F', 'E', 'F', 'F'
 };
 
+/** Lowercase variant of esc_hex_char_table. Selected at write time
+    when the caller passes YYJSON_WRITE_LOWERCASE_HEX. Matches the
+    \uXXXX case used by ext/json (PHP), Python json, Node.js
+    JSON.stringify, Go encoding/json, Ruby json. */
+yyjson_align(2)
+static const u8 esc_hex_char_table_lower[512] = {
+    '0', '0', '0', '1', '0', '2', '0', '3',
+    '0', '4', '0', '5', '0', '6', '0', '7',
+    '0', '8', '0', '9', '0', 'a', '0', 'b',
+    '0', 'c', '0', 'd', '0', 'e', '0', 'f',
+    '1', '0', '1', '1', '1', '2', '1', '3',
+    '1', '4', '1', '5', '1', '6', '1', '7',
+    '1', '8', '1', '9', '1', 'a', '1', 'b',
+    '1', 'c', '1', 'd', '1', 'e', '1', 'f',
+    '2', '0', '2', '1', '2', '2', '2', '3',
+    '2', '4', '2', '5', '2', '6', '2', '7',
+    '2', '8', '2', '9', '2', 'a', '2', 'b',
+    '2', 'c', '2', 'd', '2', 'e', '2', 'f',
+    '3', '0', '3', '1', '3', '2', '3', '3',
+    '3', '4', '3', '5', '3', '6', '3', '7',
+    '3', '8', '3', '9', '3', 'a', '3', 'b',
+    '3', 'c', '3', 'd', '3', 'e', '3', 'f',
+    '4', '0', '4', '1', '4', '2', '4', '3',
+    '4', '4', '4', '5', '4', '6', '4', '7',
+    '4', '8', '4', '9', '4', 'a', '4', 'b',
+    '4', 'c', '4', 'd', '4', 'e', '4', 'f',
+    '5', '0', '5', '1', '5', '2', '5', '3',
+    '5', '4', '5', '5', '5', '6', '5', '7',
+    '5', '8', '5', '9', '5', 'a', '5', 'b',
+    '5', 'c', '5', 'd', '5', 'e', '5', 'f',
+    '6', '0', '6', '1', '6', '2', '6', '3',
+    '6', '4', '6', '5', '6', '6', '6', '7',
+    '6', '8', '6', '9', '6', 'a', '6', 'b',
+    '6', 'c', '6', 'd', '6', 'e', '6', 'f',
+    '7', '0', '7', '1', '7', '2', '7', '3',
+    '7', '4', '7', '5', '7', '6', '7', '7',
+    '7', '8', '7', '9', '7', 'a', '7', 'b',
+    '7', 'c', '7', 'd', '7', 'e', '7', 'f',
+    '8', '0', '8', '1', '8', '2', '8', '3',
+    '8', '4', '8', '5', '8', '6', '8', '7',
+    '8', '8', '8', '9', '8', 'a', '8', 'b',
+    '8', 'c', '8', 'd', '8', 'e', '8', 'f',
+    '9', '0', '9', '1', '9', '2', '9', '3',
+    '9', '4', '9', '5', '9', '6', '9', '7',
+    '9', '8', '9', '9', '9', 'a', '9', 'b',
+    '9', 'c', '9', 'd', '9', 'e', '9', 'f',
+    'a', '0', 'a', '1', 'a', '2', 'a', '3',
+    'a', '4', 'a', '5', 'a', '6', 'a', '7',
+    'a', '8', 'a', '9', 'a', 'a', 'a', 'b',
+    'a', 'c', 'a', 'd', 'a', 'e', 'a', 'f',
+    'b', '0', 'b', '1', 'b', '2', 'b', '3',
+    'b', '4', 'b', '5', 'b', '6', 'b', '7',
+    'b', '8', 'b', '9', 'b', 'a', 'b', 'b',
+    'b', 'c', 'b', 'd', 'b', 'e', 'b', 'f',
+    'c', '0', 'c', '1', 'c', '2', 'c', '3',
+    'c', '4', 'c', '5', 'c', '6', 'c', '7',
+    'c', '8', 'c', '9', 'c', 'a', 'c', 'b',
+    'c', 'c', 'c', 'd', 'c', 'e', 'c', 'f',
+    'd', '0', 'd', '1', 'd', '2', 'd', '3',
+    'd', '4', 'd', '5', 'd', '6', 'd', '7',
+    'd', '8', 'd', '9', 'd', 'a', 'd', 'b',
+    'd', 'c', 'd', 'd', 'd', 'e', 'd', 'f',
+    'e', '0', 'e', '1', 'e', '2', 'e', '3',
+    'e', '4', 'e', '5', 'e', '6', 'e', '7',
+    'e', '8', 'e', '9', 'e', 'a', 'e', 'b',
+    'e', 'c', 'e', 'd', 'e', 'e', 'e', 'f',
+    'f', '0', 'f', '1', 'f', '2', 'f', '3',
+    'f', '4', 'f', '5', 'f', '6', 'f', '7',
+    'f', '8', 'f', '9', 'f', 'a', 'f', 'b',
+    'f', 'c', 'f', 'd', 'f', 'e', 'f', 'f'
+};
+
 /** Escaped single character table. (generate with misc/make_tables.c) */
 yyjson_align(2)
 static const u8 esc_single_char_table[512] = {
@@ -8575,6 +8647,16 @@ static const u8 esc_single_char_table[512] = {
     ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '
 };
 
+/** Returns the hex digit table to use for \uXXXX escapes. The
+    LOWERCASE_HEX flag selects lowercase 'a'..'f' to match the
+    ext/json / Python json / Node.js JSON.stringify / Go encoding/json
+    convention; default is uppercase 'A'..'F'. */
+static_inline const u8 *get_hex_table_with_flag(yyjson_write_flag flg) {
+    return has_flg(LOWERCASE_HEX)
+        ? esc_hex_char_table_lower
+        : esc_hex_char_table;
+}
+
 /** Returns the encode table with options. */
 static_inline const char_enc_type *get_enc_table_with_flag(
     yyjson_write_flag flg) {
@@ -8640,9 +8722,11 @@ static_inline u8 *write_str_noesc(u8 *cur, const u8 *str, usize str_len) {
  */
 static_inline u8 *write_str(u8 *cur, bool esc, bool inv,
                             const u8 *str, usize str_len,
-                            const char_enc_type *enc_table) {
-    /* The replacement character U+FFFD, used to indicate invalid character. */
-    const v32 rep = {{ 'F', 'F', 'F', 'D' }};
+                            const char_enc_type *enc_table,
+                            const u8 *hex_table) {
+    /* The replacement character U+FFFD, used to indicate invalid character.
+       Looked up via hex_table so that LOWERCASE_HEX produces "fffd" while
+       the default produces "FFFD". */
     const v32 pre = {{ '\\', 'u', '0', '0' }};
 
     const u8 *src = str;
@@ -8759,7 +8843,7 @@ copy_utf8:
         }
         case CHAR_ENC_ESC_1: {
             byte_copy_4(cur + 0, &pre);
-            byte_copy_2(cur + 4, &esc_hex_char_table[*src * 2]);
+            byte_copy_2(cur + 4, &hex_table[*src * 2]);
             cur += 6;
             src += 1;
             goto copy_utf8;
@@ -8775,8 +8859,8 @@ copy_utf8:
             u = (u16)(((u16)(src[0] & 0x1F) << 6) |
                       ((u16)(src[1] & 0x3F) << 0));
             byte_copy_2(cur + 0, &pre);
-            byte_copy_2(cur + 2, &esc_hex_char_table[(u >> 8) * 2]);
-            byte_copy_2(cur + 4, &esc_hex_char_table[(u & 0xFF) * 2]);
+            byte_copy_2(cur + 2, &hex_table[(u >> 8) * 2]);
+            byte_copy_2(cur + 4, &hex_table[(u & 0xFF) * 2]);
             cur += 6;
             src += 2;
             goto copy_utf8;
@@ -8792,8 +8876,8 @@ copy_utf8:
                       ((u16)(src[1] & 0x3F) << 6) |
                       ((u16)(src[2] & 0x3F) << 0));
             byte_copy_2(cur + 0, &pre);
-            byte_copy_2(cur + 2, &esc_hex_char_table[(u >> 8) * 2]);
-            byte_copy_2(cur + 4, &esc_hex_char_table[(u & 0xFF) * 2]);
+            byte_copy_2(cur + 2, &hex_table[(u >> 8) * 2]);
+            byte_copy_2(cur + 4, &hex_table[(u & 0xFF) * 2]);
             cur += 6;
             src += 3;
             goto copy_utf8;
@@ -8812,11 +8896,11 @@ copy_utf8:
             hi = (u >> 10) + 0xD800;
             lo = (u & 0x3FF) + 0xDC00;
             byte_copy_2(cur + 0, &pre);
-            byte_copy_2(cur + 2, &esc_hex_char_table[(hi >> 8) * 2]);
-            byte_copy_2(cur + 4, &esc_hex_char_table[(hi & 0xFF) * 2]);
+            byte_copy_2(cur + 2, &hex_table[(hi >> 8) * 2]);
+            byte_copy_2(cur + 4, &hex_table[(hi & 0xFF) * 2]);
             byte_copy_2(cur + 6, &pre);
-            byte_copy_2(cur + 8, &esc_hex_char_table[(lo >> 8) * 2]);
-            byte_copy_2(cur + 10, &esc_hex_char_table[(lo & 0xFF) * 2]);
+            byte_copy_2(cur + 8, &hex_table[(lo >> 8) * 2]);
+            byte_copy_2(cur + 10, &hex_table[(lo & 0xFF) * 2]);
             cur += 12;
             src += 4;
             goto copy_utf8;
@@ -8843,7 +8927,12 @@ err_cpy:
 err_esc:
     if (!inv) return NULL;
     byte_copy_2(cur + 0, &pre);
-    byte_copy_4(cur + 2, &rep);
+    /* U+FFFD = 0xFFFD, written as two pairs from hex_table so that
+       LOWERCASE_HEX produces "fffd". Replaces a single byte_copy_4
+       from a hardcoded uppercase "FFFD" v32; same total output, one
+       extra load on the (rare) invalid-UTF-8-with-ALLOW path. */
+    byte_copy_2(cur + 2, &hex_table[0xFF * 2]);
+    byte_copy_2(cur + 4, &hex_table[0xFD * 2]);
     cur += 6;
     src += 1;
     goto copy_utf8;
@@ -8972,6 +9061,7 @@ static_inline u8 *yyjson_write_single(yyjson_val *val,
     usize str_len;
     const u8 *str_ptr;
     const char_enc_type *enc_table = get_enc_table_with_flag(flg);
+    const u8 *hex_table = get_hex_table_with_flag(flg);
     bool cpy = (enc_table == enc_table_cpy);
     bool esc = has_flg(ESCAPE_UNICODE) != 0;
     bool inv = has_allow(INVALID_UNICODE) != 0;
@@ -8995,7 +9085,7 @@ static_inline u8 *yyjson_write_single(yyjson_val *val,
             if (likely(cpy) && unsafe_yyjson_get_subtype(val)) {
                 cur = write_str_noesc(cur, str_ptr, str_len);
             } else {
-                cur = write_str(cur, esc, inv, str_ptr, str_len, enc_table);
+                cur = write_str(cur, esc, inv, str_ptr, str_len, enc_table, hex_table);
                 if (unlikely(!cur)) goto fail_str;
             }
             break;
@@ -9099,6 +9189,7 @@ static_inline u8 *yyjson_write_minify(const yyjson_val *root,
     usize alc_len, alc_inc, ctx_len, ext_len, str_len;
     const u8 *str_ptr;
     const char_enc_type *enc_table = get_enc_table_with_flag(flg);
+    const u8 *hex_table = get_hex_table_with_flag(flg);
     bool cpy = (enc_table == enc_table_cpy);
     bool esc = has_flg(ESCAPE_UNICODE) != 0;
     bool inv = has_allow(INVALID_UNICODE) != 0;
@@ -9132,7 +9223,7 @@ val_begin:
         if (likely(cpy) && unsafe_yyjson_get_subtype(val)) {
             cur = write_str_noesc(cur, str_ptr, str_len);
         } else {
-            cur = write_str(cur, esc, inv, str_ptr, str_len, enc_table);
+            cur = write_str(cur, esc, inv, str_ptr, str_len, enc_table, hex_table);
             if (unlikely(!cur)) goto fail_str;
         }
         *cur++ = is_key ? ':' : ',';
@@ -9280,6 +9371,7 @@ static_inline u8 *yyjson_write_pretty(const yyjson_val *root,
     usize alc_len, alc_inc, ctx_len, ext_len, str_len, level;
     const u8 *str_ptr;
     const char_enc_type *enc_table = get_enc_table_with_flag(flg);
+    const u8 *hex_table = get_hex_table_with_flag(flg);
     bool cpy = (enc_table == enc_table_cpy);
     bool esc = has_flg(ESCAPE_UNICODE) != 0;
     bool inv = has_allow(INVALID_UNICODE) != 0;
@@ -9318,7 +9410,7 @@ val_begin:
         if (likely(cpy) && unsafe_yyjson_get_subtype(val)) {
             cur = write_str_noesc(cur, str_ptr, str_len);
         } else {
-            cur = write_str(cur, esc, inv, str_ptr, str_len, enc_table);
+            cur = write_str(cur, esc, inv, str_ptr, str_len, enc_table, hex_table);
             if (unlikely(!cur)) goto fail_str;
         }
         *cur++ = is_key ? ':' : ',';
@@ -9653,6 +9745,7 @@ static_inline u8 *yyjson_mut_write_minify(const yyjson_mut_val *root,
     usize alc_len, alc_inc, ctx_len, ext_len, str_len;
     const u8 *str_ptr;
     const char_enc_type *enc_table = get_enc_table_with_flag(flg);
+    const u8 *hex_table = get_hex_table_with_flag(flg);
     bool cpy = (enc_table == enc_table_cpy);
     bool esc = has_flg(ESCAPE_UNICODE) != 0;
     bool inv = has_allow(INVALID_UNICODE) != 0;
@@ -9687,7 +9780,7 @@ val_begin:
         if (likely(cpy) && unsafe_yyjson_get_subtype(val)) {
             cur = write_str_noesc(cur, str_ptr, str_len);
         } else {
-            cur = write_str(cur, esc, inv, str_ptr, str_len, enc_table);
+            cur = write_str(cur, esc, inv, str_ptr, str_len, enc_table, hex_table);
             if (unlikely(!cur)) goto fail_str;
         }
         *cur++ = is_key ? ':' : ',';
@@ -9840,6 +9933,7 @@ static_inline u8 *yyjson_mut_write_pretty(const yyjson_mut_val *root,
     usize alc_len, alc_inc, ctx_len, ext_len, str_len, level;
     const u8 *str_ptr;
     const char_enc_type *enc_table = get_enc_table_with_flag(flg);
+    const u8 *hex_table = get_hex_table_with_flag(flg);
     bool cpy = (enc_table == enc_table_cpy);
     bool esc = has_flg(ESCAPE_UNICODE) != 0;
     bool inv = has_allow(INVALID_UNICODE) != 0;
@@ -9879,7 +9973,7 @@ val_begin:
         if (likely(cpy) && unsafe_yyjson_get_subtype(val)) {
             cur = write_str_noesc(cur, str_ptr, str_len);
         } else {
-            cur = write_str(cur, esc, inv, str_ptr, str_len, enc_table);
+            cur = write_str(cur, esc, inv, str_ptr, str_len, enc_table, hex_table);
             if (unlikely(!cur)) goto fail_str;
         }
         *cur++ = is_key ? ':' : ',';
