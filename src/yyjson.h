@@ -1206,6 +1206,18 @@ static const yyjson_write_flag YYJSON_WRITE_PRETTY_TWO_SPACES       = 1 << 6;
     This can be helpful for text editors or NDJSON. */
 static const yyjson_write_flag YYJSON_WRITE_NEWLINE_AT_END          = 1 << 7;
 
+/** Use lowercase hex digits in `\uXXXX` escape sequences (e.g. `Ä`)
+    instead of the default uppercase (`Ä`). Both forms are spec-
+    equivalent per RFC 8259 §7, but the rest of the JSON ecosystem
+    (ext/json, Python `json`, Node.js `JSON.stringify`, Go
+    `encoding/json`, Ruby `json`, Jackson) defaults to lowercase. This
+    flag lets callers shipping output to those consumers achieve
+    byte-equality without a post-processing pass.
+    No performance impact: the writer selects between two pre-computed
+    512-byte hex tables at the top of each call; the per-byte hot loop
+    is identical. */
+static const yyjson_write_flag YYJSON_WRITE_LOWERCASE_HEX           = 1 << 8;
+
 
 
 /** The highest 8 bits of `yyjson_write_flag` and real number value's `tag`
