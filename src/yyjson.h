@@ -6386,7 +6386,8 @@ yyjson_api_inline yyjson_mut_val *yyjson_mut_arr_iter_next(
 
 yyjson_api_inline yyjson_mut_val *yyjson_mut_arr_iter_remove(
     yyjson_mut_arr_iter *iter) {
-    if (yyjson_likely(iter && 0 < iter->idx && iter->idx <= iter->max)) {
+    if (yyjson_likely(iter && iter->pre &&
+                      0 < iter->idx && iter->idx <= iter->max)) {
         yyjson_mut_val *prev = iter->pre;
         yyjson_mut_val *cur = iter->cur;
         yyjson_mut_val *next = cur->next;
@@ -6396,6 +6397,7 @@ yyjson_api_inline yyjson_mut_val *yyjson_mut_arr_iter_remove(
         unsafe_yyjson_set_len(iter->arr, iter->max);
         prev->next = next;
         iter->cur = prev;
+        iter->pre = NULL;
         return cur;
     }
     return NULL;
@@ -7036,7 +7038,8 @@ yyjson_api_inline yyjson_mut_val *yyjson_mut_obj_iter_get_val(
 
 yyjson_api_inline yyjson_mut_val *yyjson_mut_obj_iter_remove(
     yyjson_mut_obj_iter *iter) {
-    if (yyjson_likely(iter && 0 < iter->idx && iter->idx <= iter->max)) {
+    if (yyjson_likely(iter && iter->pre &&
+                      0 < iter->idx && iter->idx <= iter->max)) {
         yyjson_mut_val *prev = iter->pre;
         yyjson_mut_val *cur = iter->cur;
         yyjson_mut_val *next = cur->next->next;
@@ -7046,6 +7049,7 @@ yyjson_api_inline yyjson_mut_val *yyjson_mut_obj_iter_remove(
         unsafe_yyjson_set_len(iter->obj, iter->max);
         prev->next->next = next;
         iter->cur = prev;
+        iter->pre = NULL;
         return cur->next;
     }
     return NULL;

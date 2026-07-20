@@ -836,6 +836,25 @@ static void test_json_mut_arr_api(void) {
     
     
     //---------------------------------------------
+    // iterator with remove() called twice in a row
+
+    yyjson_mut_arr_append(arr, num1);
+    yyjson_mut_arr_append(arr, num2);
+    yyjson_mut_arr_append(arr, num3);
+
+    cmp[0] = 1;
+    cmp[1] = 3;
+    yyjson_mut_arr_iter_init(arr, &iter);
+    yyjson_mut_arr_iter_next(&iter);
+    val = yyjson_mut_arr_iter_next(&iter);
+    yy_assert(yyjson_mut_arr_iter_remove(&iter) == val);
+    yy_assert(yyjson_mut_arr_iter_remove(&iter) == NULL);
+    validate_mut_arr(arr, cmp, 2);
+    
+    yyjson_mut_arr_clear(arr);
+    
+    
+    //---------------------------------------------
     // array add()
     val = yyjson_mut_str(doc, "abc");
     yy_assert(!yyjson_mut_arr_add_val(NULL, NULL));
@@ -2138,6 +2157,25 @@ static void test_json_mut_obj_api(void) {
     yyjson_mut_obj_clear(obj);
     
     yy_assert(!yyjson_mut_obj_iter_remove(NULL));
+    
+    
+    //---------------------------------------------
+    // iterator with remove() called twice in a row
+
+    yyjson_mut_obj_add_int(doc, obj, "a", 10);
+    yyjson_mut_obj_add_int(doc, obj, "b", 11);
+    yyjson_mut_obj_add_int(doc, obj, "c", 12);
+
+    yyjson_mut_obj_iter_init(obj, &iter);
+    yyjson_mut_obj_iter_next(&iter);
+    key = yyjson_mut_obj_iter_next(&iter);
+    val = yyjson_mut_obj_iter_get_val(key);
+    yy_assert(yyjson_mut_obj_iter_remove(&iter) == val);
+    yy_assert(yyjson_mut_obj_iter_remove(&iter) == NULL);
+    set_validate(0, "a", 1, 10);
+    set_validate(1, "c", 1, 12);
+    validate_mut_obj(obj, keys, key_lens, vals, 2);
+    yyjson_mut_obj_clear(obj);
     
     
     yyjson_mut_obj_clear(NULL);
