@@ -201,7 +201,7 @@ The pre-generated Doxygen HTML for the release version can be viewed here:
     * [Build and test](https://ibireme.github.io/yyjson/doc/doxygen/html/building-and-testing.html)
     * [API and sample code](https://ibireme.github.io/yyjson/doc/doxygen/html/api.html)
     * [Data structure](https://ibireme.github.io/yyjson/doc/doxygen/html/data-structures.html)
-    * [Changelog](https://ibireme.github.io/yyjson/doc/doxygen/html/md__c_h_a_n_g_e_l_o_g.html)
+    * [Changelog](https://ibireme.github.io/yyjson/doc/doxygen/html/changelog.html)
 
 # Packaging status
 
@@ -243,6 +243,7 @@ yyjson, feel free to open a PR to add it to this list.
 * [x] Add `RAW` type for JSON reader and writer.
 * [x] Add option to limit real number output precision.
 * [x] Add option to support JSON5.
+* [ ] Add streaming JSON API.
 * [ ] Add functions to diff two JSON documents.
 * [ ] Add documentation on performance optimizations.
 * [ ] Ensure ABI stability.

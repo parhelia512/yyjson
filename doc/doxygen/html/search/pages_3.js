@@ -1,5 +1,5 @@
 var searchData=
 [
-  ['data_20structures_0',['Data Structures',['../data-structures.html',1,'']]],
-  ['deprecated_20list_1',['Deprecated List',['../deprecated.html',1,'']]]
+  ['3_0',['AWS EC2 (AMD EPYC 7R32, gcc 9.3)',['../index.html#aws-ec2-amd-epyc-7r32-gcc-93',1,'']]],
+  ['3_200_202021_2005_2025_1',['0.3.0 (2021-05-25)',['../changelog.html#autotoc_md030-2021-05-25',1,'']]]
 ];

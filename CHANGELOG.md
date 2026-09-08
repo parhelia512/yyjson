@@ -1,9 +1,9 @@
-# Changelog
+# Changelog {#changelog}
 All notable changes to this project will be documented in this file.
 
 
 
-## Unreleased
+## 0.13.0 (2026-09-08)
 #### Added 
 - Add a set of `write_buf()` functions for writing JSON to a buffer without allocation.
 - Add `YYJSON_FREESTANDING` compile-time option to build without libc (e.g. wasm).

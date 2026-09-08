@@ -10,11 +10,12 @@ var searchData=
   ['third_20party_20allocator_20library_7',['Use a third-party allocator library',['../api.html#use-a-third-party-allocator-library',1,'']]],
   ['thread_20safety_8',['Thread Safety',['../api.html#thread-safety',1,'']]],
   ['time_20options_9',['Compile-time Options',['../building-and-testing.html#compile-time-options',1,'']]],
-  ['to_20build_20the_20library_10',['Use CMake to build the library',['../building-and-testing.html#use-cmake-to-build-the-library',1,'']]],
-  ['to_20file_11',['Write JSON to file',['../api.html#write-json-to-file',1,'']]],
-  ['to_20file_20pointer_12',['Write JSON to file pointer',['../api.html#write-json-to-file-pointer',1,'']]],
-  ['to_20generate_20documentation_13',['Use CMake to generate documentation',['../building-and-testing.html#use-cmake-to-generate-documentation',1,'']]],
-  ['to_20generate_20project_14',['Use CMake to generate project',['../building-and-testing.html#use-cmake-to-generate-project',1,'']]],
-  ['to_20string_15',['Write JSON to string',['../api.html#write-json-to-string',1,'']]],
-  ['todo_20for_20v1_200_16',['TODO for v1.0',['../index.html#todo-for-v10',1,'']]]
+  ['to_20buffer_10',['Write JSON to buffer',['../api.html#write-json-to-buffer',1,'']]],
+  ['to_20build_20the_20library_11',['Use CMake to build the library',['../building-and-testing.html#use-cmake-to-build-the-library',1,'']]],
+  ['to_20file_12',['Write JSON to file',['../api.html#write-json-to-file',1,'']]],
+  ['to_20file_20pointer_13',['Write JSON to file pointer',['../api.html#write-json-to-file-pointer',1,'']]],
+  ['to_20generate_20documentation_14',['Use CMake to generate documentation',['../building-and-testing.html#use-cmake-to-generate-documentation',1,'']]],
+  ['to_20generate_20project_15',['Use CMake to generate project',['../building-and-testing.html#use-cmake-to-generate-project',1,'']]],
+  ['to_20string_16',['Write JSON to string',['../api.html#write-json-to-string',1,'']]],
+  ['todo_20for_20v1_200_17',['TODO for v1.0',['../index.html#todo-for-v10',1,'']]]
 ];

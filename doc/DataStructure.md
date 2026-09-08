@@ -1,4 +1,4 @@
-Data Structures
+Data Structures {#data-structures}
 ===============
 
 yyjson consists of two types of data structures: immutable and mutable.

@@ -1,4 +1,4 @@
-API
+API {#api}
 ===
 
 This document contains all the API usage and examples for the yyjson library.

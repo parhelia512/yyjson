@@ -1,4 +1,4 @@
-Building and testing
+Building and testing {#building-and-testing}
 ==============
 
 There are several ways to integrate this library into your project: source code, package manager, and CMake.

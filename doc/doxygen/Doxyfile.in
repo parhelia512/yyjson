@@ -1,4 +1,4 @@
-# Doxyfile 1.13.2
+# Doxyfile 1.16.1
 
 PROJECT_NAME           = yyjson
 PROJECT_NUMBER         = @PROJECT_VERSION@
@@ -32,6 +32,7 @@ HTML_EXTRA_FILES       = @CMAKE_CURRENT_SOURCE_DIR@/doc/doxygen/theme/doxygen-aw
 HTML_COLORSTYLE        = LIGHT
 DISABLE_INDEX          = NO
 GENERATE_TREEVIEW      = YES
+TREEVIEW_WIDTH         = 335
 FULL_SIDEBAR           = NO
 GENERATE_LATEX         = NO
 QUIET                  = YES

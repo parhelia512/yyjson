@@ -12,7 +12,7 @@ var searchData=
   ['pointer_20and_20patch_9',['JSON Pointer and Patch',['../api.html#json-pointer-and-patch',1,'']]],
   ['pos_10',['pos',['../yyjson_8h.html#a87eb200779eff088b93ea0a67ab3e300',1,'yyjson_read_err::pos'],['../yyjson_8h.html#a4b851ac068173fde6d305039762e33fd',1,'yyjson_ptr_err::pos']]],
   ['pre_11',['pre',['../yyjson_8h.html#aa2481ee429a84f67e5f2200a4bbc6155',1,'yyjson_mut_arr_iter::pre'],['../yyjson_8h.html#a934aea39ecf26ad163ad5dcf45cb8e6f',1,'yyjson_mut_obj_iter::pre'],['../yyjson_8h.html#ac68fb5d2b48052c8ab3368d3ef6a6b81',1,'yyjson_ptr_ctx::pre']]],
-  ['prec_20strong_12',['&lt;strong&gt;YYJSON_WRITE_FP_TO_FIXED(prec)&lt;/strong&gt;',['../api.html#yyjson_write_fp_to_fixedprec',1,'']]],
+  ['prec_12',['&lt;b&gt;YYJSON_WRITE_FP_TO_FIXED(prec)&lt;/b&gt;',['../api.html#yyjson_write_fp_to_fixedprec',1,'']]],
   ['prefers_3a_13',['For better performance, yyjson prefers:',['../index.html#for-better-performance-yyjson-prefers',1,'']]],
   ['prefix_14',['API prefix',['../api.html#api-prefix',1,'']]],
   ['processing_15',['Processing',['../api.html#number-processing',1,'Number Processing'],['../api.html#text-processing',1,'Text Processing']]],

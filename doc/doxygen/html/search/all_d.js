@@ -1,7 +1,7 @@
 var searchData=
 [
-  ['changed_0',['Changed',['../md__c_h_a_n_g_e_l_o_g.html#changed',1,'Changed'],['../md__c_h_a_n_g_e_l_o_g.html#changed-1',1,'Changed'],['../md__c_h_a_n_g_e_l_o_g.html#changed-2',1,'Changed'],['../md__c_h_a_n_g_e_l_o_g.html#changed-3',1,'Changed'],['../md__c_h_a_n_g_e_l_o_g.html#changed-4',1,'Changed'],['../md__c_h_a_n_g_e_l_o_g.html#changed-5',1,'Changed'],['../md__c_h_a_n_g_e_l_o_g.html#changed-6',1,'Changed'],['../md__c_h_a_n_g_e_l_o_g.html#changed-7',1,'Changed'],['../md__c_h_a_n_g_e_l_o_g.html#changed-8',1,'Changed'],['../md__c_h_a_n_g_e_l_o_g.html#changed-9',1,'Changed']]],
-  ['changelog_1',['Changelog',['../md__c_h_a_n_g_e_l_o_g.html',1,'']]],
+  ['changed_0',['Changed',['../changelog.html#changed',1,'Changed'],['../changelog.html#changed-1',1,'Changed'],['../changelog.html#changed-2',1,'Changed'],['../changelog.html#changed-3',1,'Changed'],['../changelog.html#changed-4',1,'Changed'],['../changelog.html#changed-5',1,'Changed'],['../changelog.html#changed-6',1,'Changed'],['../changelog.html#changed-7',1,'Changed'],['../changelog.html#changed-8',1,'Changed'],['../changelog.html#changed-9',1,'Changed'],['../changelog.html#changed-10',1,'Changed']]],
+  ['changelog_1',['Changelog',['../changelog.html',1,'']]],
   ['character_2',['NUL Character',['../api.html#nul-character',1,'']]],
   ['character_20encoding_3',['Character Encoding',['../api.html#character-encoding',1,'']]],
   ['check_4',['Null Check',['../api.html#null-check',1,'']]],
@@ -21,6 +21,6 @@ var searchData=
   ['creation_18',['Creation',['../api.html#json-array-creation',1,'JSON Array Creation'],['../api.html#json-object-creation',1,'JSON Object Creation'],['../api.html#json-value-creation',1,'JSON Value Creation']]],
   ['ctest_19',['Testing With CMake and CTest',['../building-and-testing.html#testing-with-cmake-and-ctest',1,'']]],
   ['ctn_20',['ctn',['../yyjson_8h.html#a9fabdf4380dc8f44f9b7479b54c75dd0',1,'yyjson_ptr_ctx']]],
-  ['ctx_21',['ctx',['../yyjson_8h.html#ae9499246c39efd68c206280de1b31f45',1,'yyjson_alc']]],
+  ['ctx_21',['ctx',['../structyyjson__alc.html#ae9499246c39efd68c206280de1b31f45',1,'yyjson_alc']]],
   ['cur_22',['cur',['../yyjson_8h.html#a7445de186190ceef09c5be6d589e6a65',1,'yyjson_arr_iter::cur'],['../yyjson_8h.html#af15973d5bdb6b7b8ea79571220771027',1,'yyjson_obj_iter::cur'],['../yyjson_8h.html#a2498a5bf91ec2eb7d4a00f89dc465954',1,'yyjson_mut_arr_iter::cur'],['../yyjson_8h.html#a4fc0b10196e010a7e5e9a2cec6769904',1,'yyjson_mut_obj_iter::cur']]]
 ];

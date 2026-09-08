@@ -42,10 +42,14 @@ var NAVTREE =
         [ "YYJSON_DISABLE_READER", "building-and-testing.html#yyjson_disable_reader", null ],
         [ "YYJSON_DISABLE_WRITER", "building-and-testing.html#yyjson_disable_writer", null ],
         [ "YYJSON_DISABLE_INCR_READER", "building-and-testing.html#yyjson_disable_incr_reader", null ],
+        [ "YYJSON_DISABLE_FILE", "building-and-testing.html#yyjson_disable_file", null ],
         [ "YYJSON_DISABLE_UTILS", "building-and-testing.html#yyjson_disable_utils", null ],
         [ "YYJSON_DISABLE_FAST_FP_CONV", "building-and-testing.html#yyjson_disable_fast_fp_conv", null ],
         [ "YYJSON_DISABLE_NON_STANDARD", "building-and-testing.html#yyjson_disable_non_standard", null ],
         [ "YYJSON_DISABLE_UTF8_VALIDATION", "building-and-testing.html#yyjson_disable_utf8_validation", null ],
+        [ "YYJSON_FREESTANDING", "building-and-testing.html#yyjson_freestanding", null ],
+        [ "YYJSON_READER_DEPTH_LIMIT", "building-and-testing.html#yyjson_reader_depth_limit", null ],
+        [ "YYJSON_WRITER_DEPTH_LIMIT", "building-and-testing.html#yyjson_writer_depth_limit", null ],
         [ "YYJSON_EXPORTS", "building-and-testing.html#yyjson_exports", null ],
         [ "YYJSON_IMPORTS", "building-and-testing.html#yyjson_imports", null ]
       ] ]
@@ -69,41 +73,43 @@ var NAVTREE =
         ] ],
         [ "Reader error handling", "api.html#reader-error-handling", null ],
         [ "Reader flag", "api.html#reader-flag", [
-          [ "YYJSON_READ_NOFLAG = 0", "api.html#yyjson_read_noflag--0", null ],
-          [ "YYJSON_READ_INSITU", "api.html#yyjson_read_insitu", null ],
-          [ "YYJSON_READ_STOP_WHEN_DONE", "api.html#yyjson_read_stop_when_done", null ],
-          [ "YYJSON_READ_ALLOW_TRAILING_COMMAS", "api.html#yyjson_read_allow_trailing_commas", null ],
-          [ "YYJSON_READ_ALLOW_COMMENTS", "api.html#yyjson_read_allow_comments", null ],
-          [ "YYJSON_READ_ALLOW_INF_AND_NAN", "api.html#yyjson_read_allow_inf_and_nan", null ],
-          [ "YYJSON_READ_NUMBER_AS_RAW", "api.html#yyjson_read_number_as_raw", null ],
-          [ "YYJSON_READ_BIGNUM_AS_RAW", "api.html#yyjson_read_bignum_as_raw", null ],
-          [ "YYJSON_READ_ALLOW_INVALID_UNICODE", "api.html#yyjson_read_allow_invalid_unicode", null ],
-          [ "YYJSON_READ_ALLOW_BOM", "api.html#yyjson_read_allow_bom", null ],
-          [ "YYJSON_READ_ALLOW_EXT_NUMBER", "api.html#yyjson_read_allow_ext_number", null ],
-          [ "YYJSON_READ_ALLOW_EXT_ESCAPE", "api.html#yyjson_read_allow_ext_escape", null ],
-          [ "YYJSON_READ_ALLOW_EXT_WHITESPACE", "api.html#yyjson_read_allow_ext_whitespace", null ],
-          [ "YYJSON_READ_ALLOW_SINGLE_QUOTED_STR", "api.html#yyjson_read_allow_single_quoted_str", null ],
-          [ "YYJSON_READ_ALLOW_UNQUOTED_KEY", "api.html#yyjson_read_allow_unquoted_key", null ],
-          [ "YYJSON_READ_JSON5", "api.html#yyjson_read_json5", null ]
+          [ "<b>YYJSON_READ_NOFLAG = 0</b>", "api.html#yyjson_read_noflag--0", null ],
+          [ "<b>YYJSON_READ_INSITU</b>", "api.html#yyjson_read_insitu", null ],
+          [ "<b>YYJSON_READ_STOP_WHEN_DONE</b>", "api.html#yyjson_read_stop_when_done", null ],
+          [ "<b>YYJSON_READ_ALLOW_TRAILING_COMMAS</b>", "api.html#yyjson_read_allow_trailing_commas", null ],
+          [ "<b>YYJSON_READ_ALLOW_COMMENTS</b>", "api.html#yyjson_read_allow_comments", null ],
+          [ "<b>YYJSON_READ_ALLOW_INF_AND_NAN</b>", "api.html#yyjson_read_allow_inf_and_nan", null ],
+          [ "<b>YYJSON_READ_NUMBER_AS_RAW</b>", "api.html#yyjson_read_number_as_raw", null ],
+          [ "<b>YYJSON_READ_BIGNUM_AS_RAW</b>", "api.html#yyjson_read_bignum_as_raw", null ],
+          [ "<b>YYJSON_READ_ALLOW_INVALID_UNICODE</b>", "api.html#yyjson_read_allow_invalid_unicode", null ],
+          [ "<b>YYJSON_READ_ALLOW_BOM</b>", "api.html#yyjson_read_allow_bom", null ],
+          [ "<b>YYJSON_READ_ALLOW_EXT_NUMBER</b>", "api.html#yyjson_read_allow_ext_number", null ],
+          [ "<b>YYJSON_READ_ALLOW_EXT_ESCAPE</b>", "api.html#yyjson_read_allow_ext_escape", null ],
+          [ "<b>YYJSON_READ_ALLOW_EXT_WHITESPACE</b>", "api.html#yyjson_read_allow_ext_whitespace", null ],
+          [ "<b>YYJSON_READ_ALLOW_SINGLE_QUOTED_STR</b>", "api.html#yyjson_read_allow_single_quoted_str", null ],
+          [ "<b>YYJSON_READ_ALLOW_UNQUOTED_KEY</b>", "api.html#yyjson_read_allow_unquoted_key", null ],
+          [ "<b>YYJSON_READ_JSON5</b>", "api.html#yyjson_read_json5", null ]
         ] ]
       ] ],
       [ "Writing JSON", "api.html#writing-json", [
         [ "Write JSON to string", "api.html#write-json-to-string", null ],
         [ "Write JSON to file", "api.html#write-json-to-file", null ],
         [ "Write JSON to file pointer", "api.html#write-json-to-file-pointer", null ],
+        [ "Write JSON to buffer", "api.html#write-json-to-buffer", null ],
         [ "Write JSON with options", "api.html#write-json-with-options", null ],
         [ "Writer flag", "api.html#writer-flag", [
-          [ "YYJSON_WRITE_NOFLAG = 0", "api.html#yyjson_write_noflag--0", null ],
-          [ "YYJSON_WRITE_PRETTY", "api.html#yyjson_write_pretty", null ],
-          [ "YYJSON_WRITE_PRETTY_TWO_SPACES", "api.html#yyjson_write_pretty_two_spaces", null ],
-          [ "YYJSON_WRITE_ESCAPE_UNICODE", "api.html#yyjson_write_escape_unicode", null ],
-          [ "YYJSON_WRITE_ESCAPE_SLASHES", "api.html#yyjson_write_escape_slashes", null ],
-          [ "YYJSON_WRITE_ALLOW_INF_AND_NAN", "api.html#yyjson_write_allow_inf_and_nan", null ],
-          [ "YYJSON_WRITE_INF_AND_NAN_AS_NULL", "api.html#yyjson_write_inf_and_nan_as_null", null ],
-          [ "YYJSON_WRITE_ALLOW_INVALID_UNICODE", "api.html#yyjson_write_allow_invalid_unicode", null ],
-          [ "YYJSON_WRITE_NEWLINE_AT_END", "api.html#yyjson_write_newline_at_end", null ],
-          [ "YYJSON_WRITE_FP_TO_FLOAT", "api.html#yyjson_write_fp_to_float", null ],
-          [ "YYJSON_WRITE_FP_TO_FIXED(prec)", "api.html#yyjson_write_fp_to_fixedprec", null ]
+          [ "<b>YYJSON_WRITE_NOFLAG = 0</b>", "api.html#yyjson_write_noflag--0", null ],
+          [ "<b>YYJSON_WRITE_PRETTY</b>", "api.html#yyjson_write_pretty", null ],
+          [ "<b>YYJSON_WRITE_PRETTY_TWO_SPACES</b>", "api.html#yyjson_write_pretty_two_spaces", null ],
+          [ "<b>YYJSON_WRITE_ESCAPE_UNICODE</b>", "api.html#yyjson_write_escape_unicode", null ],
+          [ "<b>YYJSON_WRITE_LOWERCASE_HEX</b>", "api.html#yyjson_write_lowercase_hex", null ],
+          [ "<b>YYJSON_WRITE_ESCAPE_SLASHES</b>", "api.html#yyjson_write_escape_slashes", null ],
+          [ "<b>YYJSON_WRITE_ALLOW_INF_AND_NAN</b>", "api.html#yyjson_write_allow_inf_and_nan", null ],
+          [ "<b>YYJSON_WRITE_INF_AND_NAN_AS_NULL</b>", "api.html#yyjson_write_inf_and_nan_as_null", null ],
+          [ "<b>YYJSON_WRITE_ALLOW_INVALID_UNICODE</b>", "api.html#yyjson_write_allow_invalid_unicode", null ],
+          [ "<b>YYJSON_WRITE_NEWLINE_AT_END</b>", "api.html#yyjson_write_newline_at_end", null ],
+          [ "<b>YYJSON_WRITE_FP_TO_FLOAT</b>", "api.html#yyjson_write_fp_to_float", null ],
+          [ "<b>YYJSON_WRITE_FP_TO_FIXED(prec)</b>", "api.html#yyjson_write_fp_to_fixedprec", null ]
         ] ]
       ] ],
       [ "Accessing JSON Document", "api.html#accessing-json-document", [
@@ -153,21 +159,22 @@ var NAVTREE =
       [ "Mutable Document", "data-structures.html#mutable-document-1", null ],
       [ "Memory Management", "data-structures.html#memory-management", null ]
     ] ],
-    [ "Changelog", "md__c_h_a_n_g_e_l_o_g.html", [
-      [ "0.12.0 (2025-08-18)", "md__c_h_a_n_g_e_l_o_g.html#autotoc_md0129-2025-08-18", null ],
-      [ "0.11.1 (2025-05-14)", "md__c_h_a_n_g_e_l_o_g.html#autotoc_md0111-2025-05-14", null ],
-      [ "0.11.0 (2025-05-05)", "md__c_h_a_n_g_e_l_o_g.html#autotoc_md0110-2025-05-05", null ],
-      [ "0.10.0 (2024-07-09)", "md__c_h_a_n_g_e_l_o_g.html#autotoc_md0100-2024-07-09", null ],
-      [ "0.9.0 (2024-04-08)", "md__c_h_a_n_g_e_l_o_g.html#autotoc_md090-2024-04-08", null ],
-      [ "0.8.0 (2023-09-13)", "md__c_h_a_n_g_e_l_o_g.html#autotoc_md080-2023-09-13", null ],
-      [ "0.7.0 (2023-05-25)", "md__c_h_a_n_g_e_l_o_g.html#autotoc_md070-2023-05-25", null ],
-      [ "0.6.0 (2022-12-12)", "md__c_h_a_n_g_e_l_o_g.html#autotoc_md060-2022-12-12", null ],
-      [ "0.5.1 (2022-06-17)", "md__c_h_a_n_g_e_l_o_g.html#autotoc_md051-2022-06-17", null ],
-      [ "0.5.0 (2022-05-25)", "md__c_h_a_n_g_e_l_o_g.html#autotoc_md050-2022-05-25", null ],
-      [ "0.4.0 (2021-12-12)", "md__c_h_a_n_g_e_l_o_g.html#autotoc_md040-2021-12-12", null ],
-      [ "0.3.0 (2021-05-25)", "md__c_h_a_n_g_e_l_o_g.html#autotoc_md030-2021-05-25", null ],
-      [ "0.2.0 (2020-12-12)", "md__c_h_a_n_g_e_l_o_g.html#autotoc_md020-2020-12-12", null ],
-      [ "0.1.0 (2020-10-26)", "md__c_h_a_n_g_e_l_o_g.html#autotoc_md010-2020-10-26", null ]
+    [ "Changelog", "changelog.html", [
+      [ "0.13.0 (2026-09-08)", "changelog.html#autotoc_md0130-2026-09-08", null ],
+      [ "0.12.0 (2025-08-18)", "changelog.html#autotoc_md0120-2025-08-18", null ],
+      [ "0.11.1 (2025-05-14)", "changelog.html#autotoc_md0111-2025-05-14", null ],
+      [ "0.11.0 (2025-05-05)", "changelog.html#autotoc_md0110-2025-05-05", null ],
+      [ "0.10.0 (2024-07-09)", "changelog.html#autotoc_md0100-2024-07-09", null ],
+      [ "0.9.0 (2024-04-08)", "changelog.html#autotoc_md090-2024-04-08", null ],
+      [ "0.8.0 (2023-09-13)", "changelog.html#autotoc_md080-2023-09-13", null ],
+      [ "0.7.0 (2023-05-25)", "changelog.html#autotoc_md070-2023-05-25", null ],
+      [ "0.6.0 (2022-12-12)", "changelog.html#autotoc_md060-2022-12-12", null ],
+      [ "0.5.1 (2022-06-17)", "changelog.html#autotoc_md051-2022-06-17", null ],
+      [ "0.5.0 (2022-05-25)", "changelog.html#autotoc_md050-2022-05-25", null ],
+      [ "0.4.0 (2021-12-12)", "changelog.html#autotoc_md040-2021-12-12", null ],
+      [ "0.3.0 (2021-05-25)", "changelog.html#autotoc_md030-2021-05-25", null ],
+      [ "0.2.0 (2020-12-12)", "changelog.html#autotoc_md020-2020-12-12", null ],
+      [ "0.1.0 (2020-10-26)", "changelog.html#autotoc_md010-2020-10-26", null ]
     ] ],
     [ "Deprecated List", "deprecated.html", null ],
     [ "Files", "files.html", [
@@ -194,9 +201,10 @@ var NAVTREE =
 var NAVTREEINDEX =
 [
 "annotated.html",
-"yyjson_8h.html#a2a9e116a307c8dbcebc82305eca91fd3",
-"yyjson_8h.html#aa4b243e9de837405d83bcc3251156cea"
+"yyjson_8h.html#a26da966994dab4fb6382ca00c23e7323",
+"yyjson_8h.html#aa6d66fc870aac34589593a0bf6561647"
 ];
 
 var SYNCONMSG = 'click to disable panel synchronization';
 var SYNCOFFMSG = 'click to enable panel synchronization';
+var LISTOFALLMEMBERS = 'List of all members';

@@ -1,6 +1,6 @@
 var searchData=
 [
-  ['malloc_0',['malloc',['../yyjson_8h.html#a83133b6b92e0fec52ec3c62538f44311',1,'yyjson_alc']]],
+  ['malloc_0',['malloc',['../structyyjson__alc.html#a83133b6b92e0fec52ec3c62538f44311',1,'yyjson_alc']]],
   ['management_1',['Memory Management',['../data-structures.html#memory-management',1,'']]],
   ['manager_2',['Package manager',['../building-and-testing.html#package-manager',1,'']]],
   ['max_3',['max',['../yyjson_8h.html#a4c9dc89d29725de644b1d9b801aa28ff',1,'yyjson_arr_iter::max'],['../yyjson_8h.html#a05ac3955547a4be055542f922564ded6',1,'yyjson_obj_iter::max'],['../yyjson_8h.html#a1d8217217a7138d40e01752d3181ab85',1,'yyjson_mut_arr_iter::max'],['../yyjson_8h.html#aaf5c505b42eeb64e7a0ac17e3d7d3847',1,'yyjson_mut_obj_iter::max']]],
