@@ -697,6 +697,20 @@ if (json) {
 alc.free(alc.ctx, json);
 ```
 
+The complete list of error codes (`yyjson_write_code`):
+
+| Code | Name | Description |
+|------|------|-------------|
+| 0 | `YYJSON_WRITE_SUCCESS` | Success, no error. |
+| 1 | `YYJSON_WRITE_ERROR_INVALID_PARAMETER` | Invalid parameter, such as NULL document. |
+| 2 | `YYJSON_WRITE_ERROR_MEMORY_ALLOCATION` | Memory allocation failure. |
+| 3 | `YYJSON_WRITE_ERROR_INVALID_VALUE_TYPE` | Invalid value type in JSON document. |
+| 4 | `YYJSON_WRITE_ERROR_NAN_OR_INF` | NaN or Infinity number occurs. |
+| 5 | `YYJSON_WRITE_ERROR_FILE_OPEN` | Failed to open a file. |
+| 6 | `YYJSON_WRITE_ERROR_FILE_WRITE` | Failed to write a file. |
+| 7 | `YYJSON_WRITE_ERROR_INVALID_STRING` | Invalid unicode in string. |
+| 8 | `YYJSON_WRITE_ERROR_DEPTH` | Nesting depth exceeded `YYJSON_WRITER_DEPTH_LIMIT`. |
+
 
 ## Writer flag
 The library provides a set of flags for JSON writer.<br/>
@@ -888,8 +902,8 @@ double yyjson_get_num(const yyjson_val *val);
 // Returns the string value, or NULL if `val` is not string type.
 const char *yyjson_get_str(const yyjson_val *val);
 
-// Returns the content length (string length in bytes, array size, 
-// object size), or 0 if the value does not contain length data.
+// Returns the content length for raw/string/array/object values.
+// Returns 0 if `val` is NULL. The return value is unspecified for other types.
 size_t yyjson_get_len(const yyjson_val *val);
 
 // Returns whether the value is equal to a string.

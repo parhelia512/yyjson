@@ -19,7 +19,10 @@ All notable changes to this project will be documented in this file.
 #### Fixed
 - Fix `tinycc` preprocessor error.
 - Fix an uninitialized read when parsing numbers (OSS-Fuzz #498706935).
-- Fix various edge cases in the reader and writer APIs.
+- Fix integer truncation when parsing extremely large numbers.
+- Fix `yyjson_incr_read()` when a value is split across input chunks.
+- Fix `iter_remove()` when called twice in a row.
+- Handle read errors from non-seekable streams and writing empty files.
 
 
 ## 0.12.0 (2025-08-18)
