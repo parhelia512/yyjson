@@ -8,7 +8,7 @@ All notable changes to this project will be documented in this file.
 - Add a set of `write_buf()` functions for writing JSON to a buffer without allocation.
 - Add `YYJSON_FREESTANDING` compile-time option to build without libc (e.g. wasm).
 - Add `YYJSON_DISABLE_FILE` compile-time option to disable file/fp read and write APIs.
-- Add `YYJSON_READER_DEPTH_LIMIT` compile-time option to limit JSON nesting depth.
+- Add `YYJSON_READER_DEPTH_LIMIT` and `YYJSON_WRITER_DEPTH_LIMIT` compile-time options.
 - Add `YYJSON_WRITE_LOWERCASE_HEX` flag to write `\uXXXX` escapes in lowercase.
 - Add Swift Package Manager traits for compile-time configuration.
 

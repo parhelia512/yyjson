@@ -343,6 +343,10 @@ uint32_t yyjson_version(void) {
 #define YYJSON_READER_DEPTH_LIMIT 0
 #endif
 
+#ifndef YYJSON_WRITER_DEPTH_LIMIT
+#define YYJSON_WRITER_DEPTH_LIMIT 0
+#endif
+
 /*==============================================================================
  * MARK: - Macros (Private)
  *============================================================================*/
@@ -5402,7 +5406,7 @@ static_inline yyjson_doc *read_root_minify(u8 *hdr, u8 *cur, u8 *eof,
     u8 **pre = &raw_ptr; /* previous raw end pointer */
 
 #if YYJSON_READER_DEPTH_LIMIT
-    u32 container_depth = 0; /* current array/object depth */
+    usize ctn_depth = 0; /* current array/object depth */
 #endif
 
     dat_len = has_flg(STOP_WHEN_DONE) ? 256 : (usize)(eof - cur);
@@ -5431,8 +5435,8 @@ static_inline yyjson_doc *read_root_minify(u8 *hdr, u8 *cur, u8 *eof,
 
 arr_begin:
 #if YYJSON_READER_DEPTH_LIMIT
-    container_depth++;
-    if (unlikely(container_depth >= YYJSON_READER_DEPTH_LIMIT)) {
+    ctn_depth++;
+    if (unlikely(ctn_depth >= (usize)YYJSON_READER_DEPTH_LIMIT)) {
         goto fail_depth;
     }
 #endif
@@ -5542,7 +5546,7 @@ arr_val_end:
 
 arr_end:
 #if YYJSON_READER_DEPTH_LIMIT
-    container_depth--;
+    ctn_depth--;
 #endif
     /* get parent container */
     ctn_parent = (yyjson_val *)(void *)((u8 *)ctn - ctn->uni.ofs);
@@ -5563,8 +5567,8 @@ arr_end:
 
 obj_begin:
 #if YYJSON_READER_DEPTH_LIMIT
-    container_depth++;
-    if (unlikely(container_depth >= YYJSON_READER_DEPTH_LIMIT)) {
+    ctn_depth++;
+    if (unlikely(ctn_depth >= (usize)YYJSON_READER_DEPTH_LIMIT)) {
         goto fail_depth;
     }
 #endif
@@ -5715,7 +5719,7 @@ obj_val_end:
 
 obj_end:
 #if YYJSON_READER_DEPTH_LIMIT
-    container_depth--;
+    ctn_depth--;
 #endif
     /* pop container */
     ctn_parent = (yyjson_val *)(void *)((u8 *)ctn - ctn->uni.ofs);
@@ -5828,7 +5832,7 @@ static_inline yyjson_doc *read_root_pretty(u8 *hdr, u8 *cur, u8 *eof,
     u8 *raw_ptr = raw_end;
     u8 **pre = &raw_ptr; /* previous raw end pointer */
 #if YYJSON_READER_DEPTH_LIMIT
-    u32 container_depth = 0; /* current array/object depth */
+    usize ctn_depth = 0; /* current array/object depth */
 #endif
 
     dat_len = has_flg(STOP_WHEN_DONE) ? 256 : (usize)(eof - cur);
@@ -5859,8 +5863,8 @@ static_inline yyjson_doc *read_root_pretty(u8 *hdr, u8 *cur, u8 *eof,
 
 arr_begin:
 #if YYJSON_READER_DEPTH_LIMIT
-    container_depth++;
-    if (unlikely(container_depth >= YYJSON_READER_DEPTH_LIMIT)) {
+    ctn_depth++;
+    if (unlikely(ctn_depth >= (usize)YYJSON_READER_DEPTH_LIMIT)) {
         goto fail_depth;
     }
 #endif
@@ -5988,7 +5992,7 @@ arr_val_end:
 
 arr_end:
 #if YYJSON_READER_DEPTH_LIMIT
-    container_depth--;
+    ctn_depth--;
 #endif
     /* get parent container */
     ctn_parent = (yyjson_val *)(void *)((u8 *)ctn - ctn->uni.ofs);
@@ -6010,8 +6014,8 @@ arr_end:
 
 obj_begin:
 #if YYJSON_READER_DEPTH_LIMIT
-    container_depth++;
-    if (unlikely(container_depth >= YYJSON_READER_DEPTH_LIMIT)) {
+    ctn_depth++;
+    if (unlikely(ctn_depth >= (usize)YYJSON_READER_DEPTH_LIMIT)) {
         goto fail_depth;
     }
 #endif
@@ -6183,7 +6187,7 @@ obj_val_end:
 
 obj_end:
 #if YYJSON_READER_DEPTH_LIMIT
-    container_depth--;
+    ctn_depth--;
 #endif
 
     /* pop container */
@@ -6567,7 +6571,7 @@ struct yyjson_incr_state {
     usize alc_len; /* value count allocated */
     usize ctn_len; /* the number of elements in current container */
 #if YYJSON_READER_DEPTH_LIMIT
-    u32 ctn_depth; /* current array/object depth */
+    usize ctn_depth; /* current array/object depth */
 #endif
     yyjson_val *val_hdr; /* the head of allocated values */
     yyjson_val *val_end; /* the end of allocated values */
@@ -6671,7 +6675,7 @@ yyjson_doc *yyjson_incr_read(yyjson_incr_state *state, size_t len,
 
     /* save position where it's possible to resume incremental parsing */
 #if YYJSON_READER_DEPTH_LIMIT
-#define save_incr_depth() (state->ctn_depth = container_depth)
+#define save_incr_depth() (state->ctn_depth = ctn_depth)
 #else
 #define save_incr_depth() ((void)0)
 #endif
@@ -6720,7 +6724,7 @@ yyjson_doc *yyjson_incr_read(yyjson_incr_state *state, size_t len,
     u8 saved_end = '\0'; /* saved end char */
 
 #if YYJSON_READER_DEPTH_LIMIT
-    u32 container_depth = 0; /* current array/object depth */
+    usize ctn_depth = 0; /* current array/object depth */
 #endif
 
     /* validate input parameters */
@@ -6743,7 +6747,7 @@ yyjson_doc *yyjson_incr_read(yyjson_incr_state *state, size_t len,
     alc = state->alc;
     ctn_len = state->ctn_len;
 #if YYJSON_READER_DEPTH_LIMIT
-    container_depth = state->ctn_depth;
+    ctn_depth = state->ctn_depth;
 #endif
     hdr_len = state->hdr_len;
     alc_len = state->alc_len;
@@ -6853,8 +6857,8 @@ doc_begin:
 
 arr_begin:
 #if YYJSON_READER_DEPTH_LIMIT
-    container_depth++;
-    if (unlikely(container_depth >= YYJSON_READER_DEPTH_LIMIT)) {
+    ctn_depth++;
+    if (unlikely(ctn_depth >= (usize)YYJSON_READER_DEPTH_LIMIT)) {
         goto fail_depth;
     }
 #endif
@@ -6949,7 +6953,7 @@ arr_val_end:
 
 arr_end:
 #if YYJSON_READER_DEPTH_LIMIT
-    container_depth--;
+    ctn_depth--;
 #endif
     /* get parent container */
     ctn_parent = (yyjson_val *)(void *)((u8 *)ctn - ctn->uni.ofs);
@@ -6970,8 +6974,8 @@ arr_end:
 
 obj_begin:
 #if YYJSON_READER_DEPTH_LIMIT
-    container_depth++;
-    if (unlikely(container_depth >= YYJSON_READER_DEPTH_LIMIT)) {
+    ctn_depth++;
+    if (unlikely(ctn_depth >= (usize)YYJSON_READER_DEPTH_LIMIT)) {
         goto fail_depth;
     }
 #endif
@@ -7091,7 +7095,7 @@ obj_val_end:
 
 obj_end:
 #if YYJSON_READER_DEPTH_LIMIT
-    container_depth--;
+    ctn_depth--;
 #endif
 
     /* pop container */
@@ -9335,6 +9339,9 @@ static_inline u8 *write_root_minify(const yyjson_val *root,
     u8 *hdr, *cur, *end, *tmp;
     yyjson_write_ctx *ctx, *ctx_tmp;
     usize alc_len, alc_inc, ctx_len, ext_len, str_len;
+#if YYJSON_WRITER_DEPTH_LIMIT
+    usize ctn_depth = 0;
+#endif
     const u8 *str_ptr;
     const char_enc_type *enc_table = get_enc_table_with_flag(flg);
     const u8 *hex_table = get_hex_table_with_flag(flg);
@@ -9397,7 +9404,16 @@ val_begin:
         ctn_len_tmp = unsafe_yyjson_get_len(val);
         ctn_obj_tmp = (val_type == YYJSON_TYPE_OBJ);
         incr_len(2 * sizeof(*ctx));
+#if YYJSON_WRITER_DEPTH_LIMIT
+        ctn_depth++;
+        if (unlikely(ctn_depth >= (usize)YYJSON_WRITER_DEPTH_LIMIT)) {
+            goto fail_depth;
+        }
+#endif
         if (unlikely(ctn_len_tmp == 0)) {
+#if YYJSON_WRITER_DEPTH_LIMIT
+            ctn_depth--;
+#endif
             /* write empty container */
             *cur++ = (u8)('[' | ((u8)ctn_obj_tmp << 5));
             *cur++ = (u8)(']' | ((u8)ctn_obj_tmp << 5));
@@ -9443,6 +9459,9 @@ val_end:
     goto val_begin;
 
 ctn_end:
+#if YYJSON_WRITER_DEPTH_LIMIT
+    ctn_depth--;
+#endif
     cur--;
     *cur++ = (u8)(']' | ((u8)ctn_obj << 5));
     *cur++ = ',';
@@ -9470,6 +9489,9 @@ fail_alloc: return_err(MEMORY_ALLOCATION, MSG_MALLOC);
 fail_type:  return_err(INVALID_VALUE_TYPE, MSG_ERR_TYPE);
 fail_num:   return_err(NAN_OR_INF, MSG_NAN_INF);
 fail_str:   return_err(INVALID_STRING, MSG_ERR_UTF8);
+#if YYJSON_WRITER_DEPTH_LIMIT
+fail_depth: return_err(DEPTH, MSG_DEPTH);
+#endif
 
 #undef return_err
 #undef incr_len
@@ -9526,6 +9548,9 @@ static_inline u8 *write_root_pretty(const yyjson_val *root,
     u8 *hdr, *cur, *end, *tmp;
     yyjson_write_ctx *ctx, *ctx_tmp;
     usize alc_len, alc_inc, ctx_len, ext_len, str_len, level;
+#if YYJSON_WRITER_DEPTH_LIMIT
+    usize ctn_depth = 0;
+#endif
     const u8 *str_ptr;
     const char_enc_type *enc_table = get_enc_table_with_flag(flg);
     const u8 *hex_table = get_hex_table_with_flag(flg);
@@ -9600,7 +9625,16 @@ val_begin:
         ctn_len_tmp = unsafe_yyjson_get_len(val);
         ctn_obj_tmp = (val_type == YYJSON_TYPE_OBJ);
         incr_len(2 * sizeof(*ctx) + (no_indent ? 0 : level * 4));
+#if YYJSON_WRITER_DEPTH_LIMIT
+        ctn_depth++;
+        if (unlikely(ctn_depth >= (usize)YYJSON_WRITER_DEPTH_LIMIT)) {
+            goto fail_depth;
+        }
+#endif
         if (unlikely(ctn_len_tmp == 0)) {
+#if YYJSON_WRITER_DEPTH_LIMIT
+            ctn_depth--;
+#endif
             /* write empty container */
             cur = write_indent(cur, no_indent ? 0 : level, spaces);
             *cur++ = (u8)('[' | ((u8)ctn_obj_tmp << 5));
@@ -9658,6 +9692,9 @@ val_end:
     goto val_begin;
 
 ctn_end:
+#if YYJSON_WRITER_DEPTH_LIMIT
+    ctn_depth--;
+#endif
     cur -= 2;
     *cur++ = '\n';
     incr_len(level * 4);
@@ -9688,6 +9725,9 @@ fail_alloc: return_err(MEMORY_ALLOCATION, MSG_MALLOC);
 fail_type:  return_err(INVALID_VALUE_TYPE, MSG_ERR_TYPE);
 fail_num:   return_err(NAN_OR_INF, MSG_NAN_INF);
 fail_str:   return_err(INVALID_STRING, MSG_ERR_UTF8);
+#if YYJSON_WRITER_DEPTH_LIMIT
+fail_depth: return_err(DEPTH, MSG_DEPTH);
+#endif
 
 #undef return_err
 #undef incr_len
@@ -9944,6 +9984,9 @@ static_inline u8 *mut_write_root_minify(const yyjson_mut_val *root,
     u8 *hdr, *cur, *end, *tmp;
     yyjson_mut_write_ctx *ctx, *ctx_tmp;
     usize alc_len, alc_inc, ctx_len, ext_len, str_len;
+#if YYJSON_WRITER_DEPTH_LIMIT
+    usize ctn_depth = 0;
+#endif
     const u8 *str_ptr;
     const char_enc_type *enc_table = get_enc_table_with_flag(flg);
     const u8 *hex_table = get_hex_table_with_flag(flg);
@@ -10007,7 +10050,16 @@ val_begin:
         ctn_len_tmp = unsafe_yyjson_get_len(val);
         ctn_obj_tmp = (val_type == YYJSON_TYPE_OBJ);
         incr_len(2 * sizeof(*ctx));
+#if YYJSON_WRITER_DEPTH_LIMIT
+        ctn_depth++;
+        if (unlikely(ctn_depth >= (usize)YYJSON_WRITER_DEPTH_LIMIT)) {
+            goto fail_depth;
+        }
+#endif
         if (unlikely(ctn_len_tmp == 0)) {
+#if YYJSON_WRITER_DEPTH_LIMIT
+            ctn_depth--;
+#endif
             /* write empty container */
             *cur++ = (u8)('[' | ((u8)ctn_obj_tmp << 5));
             *cur++ = (u8)(']' | ((u8)ctn_obj_tmp << 5));
@@ -10055,6 +10107,9 @@ val_end:
     goto val_begin;
 
 ctn_end:
+#if YYJSON_WRITER_DEPTH_LIMIT
+    ctn_depth--;
+#endif
     cur--;
     *cur++ = (u8)(']' | ((u8)ctn_obj << 5));
     *cur++ = ',';
@@ -10084,6 +10139,9 @@ fail_alloc: return_err(MEMORY_ALLOCATION, MSG_MALLOC);
 fail_type:  return_err(INVALID_VALUE_TYPE, MSG_ERR_TYPE);
 fail_num:   return_err(NAN_OR_INF, MSG_NAN_INF);
 fail_str:   return_err(INVALID_STRING, MSG_ERR_UTF8);
+#if YYJSON_WRITER_DEPTH_LIMIT
+fail_depth: return_err(DEPTH, MSG_DEPTH);
+#endif
 
 #undef return_err
 #undef incr_len
@@ -10141,6 +10199,9 @@ static_inline u8 *mut_write_root_pretty(const yyjson_mut_val *root,
     u8 *hdr, *cur, *end, *tmp;
     yyjson_mut_write_ctx *ctx, *ctx_tmp;
     usize alc_len, alc_inc, ctx_len, ext_len, str_len, level;
+#if YYJSON_WRITER_DEPTH_LIMIT
+    usize ctn_depth = 0;
+#endif
     const u8 *str_ptr;
     const char_enc_type *enc_table = get_enc_table_with_flag(flg);
     const u8 *hex_table = get_hex_table_with_flag(flg);
@@ -10216,7 +10277,16 @@ val_begin:
         ctn_len_tmp = unsafe_yyjson_get_len(val);
         ctn_obj_tmp = (val_type == YYJSON_TYPE_OBJ);
         incr_len(2 * sizeof(*ctx) + (no_indent ? 0 : level * 4));
+#if YYJSON_WRITER_DEPTH_LIMIT
+        ctn_depth++;
+        if (unlikely(ctn_depth >= (usize)YYJSON_WRITER_DEPTH_LIMIT)) {
+            goto fail_depth;
+        }
+#endif
         if (unlikely(ctn_len_tmp == 0)) {
+#if YYJSON_WRITER_DEPTH_LIMIT
+            ctn_depth--;
+#endif
             /* write empty container */
             cur = write_indent(cur, no_indent ? 0 : level, spaces);
             *cur++ = (u8)('[' | ((u8)ctn_obj_tmp << 5));
@@ -10276,6 +10346,9 @@ val_end:
     goto val_begin;
 
 ctn_end:
+#if YYJSON_WRITER_DEPTH_LIMIT
+    ctn_depth--;
+#endif
     cur -= 2;
     *cur++ = '\n';
     incr_len(level * 4);
@@ -10308,6 +10381,9 @@ fail_alloc: return_err(MEMORY_ALLOCATION, MSG_MALLOC);
 fail_type:  return_err(INVALID_VALUE_TYPE, MSG_ERR_TYPE);
 fail_num:   return_err(NAN_OR_INF, MSG_NAN_INF);
 fail_str:   return_err(INVALID_STRING, MSG_ERR_UTF8);
+#if YYJSON_WRITER_DEPTH_LIMIT
+fail_depth: return_err(DEPTH, MSG_DEPTH);
+#endif
 
 #undef return_err
 #undef incr_len

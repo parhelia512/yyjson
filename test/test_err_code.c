@@ -583,6 +583,25 @@ static void test_read_err_code(void) {
     yy_assert(err.code == YYJSON_READ_ERROR_UNEXPECTED_CHARACTER);
     yy_assert(err.pos == 0);
 #endif
+
+#if YYJSON_READER_DEPTH_LIMIT
+    // -------------------------------------------------------------------------
+    // Nesting depth exceeded.
+    {
+        size_t n = (size_t)YYJSON_READER_DEPTH_LIMIT + 1;
+        char *json = (char *)malloc(n * 2 + 2);
+        size_t i;
+        yy_assert(json);
+        for (i = 0; i < n; i++) json[i] = '[';
+        json[n] = '1';
+        for (i = 0; i < n; i++) json[n + 1 + i] = ']';
+        json[n * 2 + 1] = '\0';
+        memset(&err, -1, sizeof(err));
+        yyjson_doc_free(yyjson_read_opts(json, n * 2 + 1, 0, NULL, &err));
+        yy_assert(err.code == YYJSON_READ_ERROR_DEPTH);
+        free(json);
+    }
+#endif
     
 #endif
 }
@@ -673,6 +692,30 @@ static void test_write_err_code(void) {
     yy_assert(json == NULL);
     yyjson_mut_doc_free(doc);
     yy_assert(err.code == YYJSON_WRITE_ERROR_INVALID_STRING);
+
+#if YYJSON_WRITER_DEPTH_LIMIT
+    // -------------------------------------------------------------------------
+    // Nesting depth exceeded.
+    {
+        int i, depth = YYJSON_WRITER_DEPTH_LIMIT + 1;
+        doc = yyjson_mut_doc_new(NULL);
+        val = yyjson_mut_int(doc, 1);
+        for (i = 0; i < depth; i++) {
+            yyjson_mut_val *arr = yyjson_mut_arr(doc);
+            yyjson_mut_arr_append(arr, val);
+            val = arr;
+        }
+        yyjson_mut_doc_set_root(doc, val);
+        memset(&err, -1, sizeof(err));
+        json = yyjson_mut_write_opts(doc, 0, NULL, NULL, &err);
+        yy_assert(json == NULL);
+        yy_assert(err.code == YYJSON_WRITE_ERROR_DEPTH);
+        json = yyjson_mut_write_opts(doc, YYJSON_WRITE_PRETTY, NULL, NULL, &err);
+        yy_assert(json == NULL);
+        yy_assert(err.code == YYJSON_WRITE_ERROR_DEPTH);
+        yyjson_mut_doc_free(doc);
+    }
+#endif
     
 #endif
 }

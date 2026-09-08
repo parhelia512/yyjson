@@ -48,6 +48,7 @@ option(YYJSON_DISABLE_UTF8_VALIDATION "Disable UTF-8 validation" OFF)
 option(YYJSON_DISABLE_UNALIGNED_MEMORY_ACCESS "Disable unaligned memory access explicit" OFF)
 option(YYJSON_FREESTANDING "Build without libc (freestanding)" OFF)
 option(YYJSON_READER_DEPTH_LIMIT "Set a depth limit for reading nested objects/arrays, 0 for unlimited" 0)
+option(YYJSON_WRITER_DEPTH_LIMIT "Set a depth limit for writing nested objects/arrays, 0 for unlimited" 0)
 
 
 # ------------------------------------------------------------------------------
@@ -88,6 +89,9 @@ if(YYJSON_FREESTANDING)
 endif()
 if(YYJSON_READER_DEPTH_LIMIT GREATER 0)
     target_compile_definitions(yyjson PUBLIC YYJSON_READER_DEPTH_LIMIT=${YYJSON_READER_DEPTH_LIMIT})
+endif()
+if(YYJSON_WRITER_DEPTH_LIMIT GREATER 0)
+    target_compile_definitions(yyjson PUBLIC YYJSON_WRITER_DEPTH_LIMIT=${YYJSON_WRITER_DEPTH_LIMIT})
 endif()
 
 
@@ -576,7 +580,7 @@ if(YYJSON_BUILD_MISC)
         set_default_xcode_property(make_tables)
     endif()
 
-    # depth-limit experiment; only does anything if YYJSON_READER_DEPTH_LIMIT is set
+    # depth-limit experiment; only does anything if a DEPTH_LIMIT is set
     add_executable(experiment_depth_limit "misc/experiment_depth_limit.c")
     target_link_libraries(experiment_depth_limit PRIVATE yyjson)
     if(XCODE)

@@ -110,9 +110,16 @@
 /* auto detected in yyjson.c */
 #endif
 
-/* Define to an integer to set a depth limit for containers (arrays/objects). */
+/* Define to an integer to set a depth limit for reading nested arrays/objects.
+   0 disables the policy limit. */
 #ifndef YYJSON_READER_DEPTH_LIMIT
 #define YYJSON_READER_DEPTH_LIMIT 0
+#endif
+
+/* Define to an integer to set a depth limit for writing nested arrays/objects.
+   0 disables the policy limit. */
+#ifndef YYJSON_WRITER_DEPTH_LIMIT
+#define YYJSON_WRITER_DEPTH_LIMIT 0
 #endif
 
 /* Define as 1 to build without libc (stdlib, string, math, stdio).
@@ -1329,6 +1336,9 @@ static const yyjson_write_code YYJSON_WRITE_ERROR_FILE_WRITE            = 6;
 
 /** Invalid unicode in string. */
 static const yyjson_write_code YYJSON_WRITE_ERROR_INVALID_STRING        = 7;
+
+/** Nesting depth limit exceeded. */
+static const yyjson_write_code YYJSON_WRITE_ERROR_DEPTH                 = 8;
 
 /** Error information for JSON writer. */
 typedef struct yyjson_write_err {
