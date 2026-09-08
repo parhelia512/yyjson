@@ -3735,7 +3735,7 @@ static_noinline void bigint_set_buf(bigint *big, u64 sig, i32 *exp,
         u64 val = 0;
         bool dig_big_cut = false;
         bool has_dot = (hdr < dot_pos) & (dot_pos < sig_end);
-        u32 dig_len_total = U64_SAFE_DIG + (u32)(sig_end - hdr) - has_dot;
+        usize dig_len_total = U64_SAFE_DIG + (usize)(sig_end - hdr) - has_dot;
 
         sig -= (*sig_cut >= '5'); /* sig was rounded before */
         if (dig_len_total > F64_MAX_DEC_DIG) {
